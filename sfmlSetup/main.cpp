@@ -20,7 +20,7 @@
 int width = 2400;
 int height = 1350;
 int squareCount = 0;
-
+//test
 sf::RenderWindow window(sf::VideoMode({ 2400, 1350 }), "AWA", sf::Style::Default);
 sf::View worldView(sf::FloatRect{ {0.f, 0.f}, {static_cast<float>(width), static_cast<float>(height)} });
 sf::View uiView = window.getDefaultView();
