@@ -11,6 +11,36 @@
 #include "MathUtils.h"
 namespace renderB2
 {
+	sf::Font DefaultFont("Assets\\Fonts\\NanoDyongSong.ttf");
+
+	sf::Font getDefaultFont() {
+		DefaultFont.setSmooth(false);
+		return DefaultFont;
+	}
+
+	sf::Font& getDefaultFontAddress() {
+		static sf::Font font;
+		font.setSmooth(false);
+		static bool loaded = false;
+		if (!loaded) {
+			if (!font.openFromFile("Assets\\Fonts\\NanoDyongSong.ttf")) {
+				std::cerr << "Failed to load font" << std::endl;
+			}
+			loaded = true;
+		}
+		return font;
+	}
+	void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text) {
+		sf::FloatRect shapeBounds = shape.getGlobalBounds();
+		sf::FloatRect shapeLocalBounds = shape.getLocalBounds();
+		sf::FloatRect textBounds = text.getLocalBounds();
+		float textX = shapeBounds.position.x + shapeLocalBounds.size.x / 2.f - textBounds.size.x / 2.f;// -(textBounds.width / 2.0f);
+		float textY = shapeBounds.position.y + shapeLocalBounds.size.y / 2.f - textBounds.size.y / 1.5f;// -(textBounds.height / 2.0f);
+
+		text.setPosition({ textX, textY });
+		window->draw(shape);
+		window->draw(text);
+	}
 	sf::ConvexShape getRectangleMinusCorners(float Width, float Length, float Subtract) {
 		sf::ConvexShape convex;
 		convex.setPointCount(8);
@@ -29,7 +59,7 @@ namespace renderB2
 		shape->setOutlineThickness(rendersettings.OutlineThickness);
 		shape->setOutlineColor(rendersettings.OutlineColor);
 		if (rendersettings.Texture.has_value()) {
-			const auto& textureRef = rendersettings.Texture.value();
+			const auto textureRef = rendersettings.Texture.value();
 			shape->setTexture(&textureRef);
 		}
 		if (rendersettings.TextureRect.has_value()) {
@@ -61,7 +91,7 @@ namespace renderB2
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
 
-		shape.setPosition({ screensettings.height / 2.0f - pos.y + screensettings.camX, screensettings.width / 2.0f - pos.x + screensettings.camY});
+		shape.setPosition({ pos.y, pos.x });
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);
@@ -75,7 +105,7 @@ namespace renderB2
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
 
-		shape.setPosition({ screensettings.height / 2.0f - pos.y + screensettings.camX, screensettings.width / 2.0f - pos.x + screensettings.camY });
+		shape.setPosition({ pos.y, screensettings.width / 2.0f - pos.x});
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);
@@ -87,7 +117,7 @@ namespace renderB2
 		shape.setOrigin({ circle.radius, circle.radius });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
-		shape.setPosition({ screensettings.height / 2.0f - pos.y + screensettings.camX, screensettings.width / 2.0f - pos.x + screensettings.camY });
+		shape.setPosition({ pos.y, pos.x });
 		shape.setRotation(sf::degrees(90));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);

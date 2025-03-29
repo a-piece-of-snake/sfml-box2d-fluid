@@ -17,11 +17,10 @@ namespace GameObjects
         int proxyId;
         int life = -1 ;
         int age = 0;
-        b2Vec2 pos = { 0, 0 } ;
-        b2Vec2 nextTickForce = { 0, 0 };
-        b2Vec2 LinearVelocity = { 0, 0 };
-        float density = 0.0f;    // √‹∂»
-        float pressure = 0.0f;   // —π¡¶
+        b2Vec2 pos = b2Vec2_zero;
+        b2Vec2 LinearVelocity = b2Vec2_zero;
+        b2Vec2 nextTickForce = b2Vec2_zero;
+        b2Vec2 nextTickLinearImpulse = b2Vec2_zero;
         float nearDensity;
         float nearPressure;
     };
@@ -32,7 +31,7 @@ namespace GameObjects
         float restitution = 0.25f;
         float Impact = 4.f;
         float FORCE_MULTIPLIER = -2000.0f;
-        float FORCE_SURFACE = 0.5f;
+        float FORCE_SURFACE = 0.75f;
         float MomentumCoefficient = 1.0f;
     };
     struct ParticleGroup{

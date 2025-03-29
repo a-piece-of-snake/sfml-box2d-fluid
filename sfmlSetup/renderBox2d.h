@@ -12,6 +12,9 @@
 
 namespace renderB2
 {
+    sf::Font getDefaultFont();
+    sf::Font& getDefaultFontAddress();
+    void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text);
     sf::ConvexShape getRectangleMinusCorners(float Width, float Length, float Subtract);
     struct RenderSettings
     {
