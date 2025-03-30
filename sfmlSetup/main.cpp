@@ -17,6 +17,7 @@
 #include <thread>
 #include <vector>
 #include <numeric>
+//test
 int width = 2400;
 int height = 1350;
 int particleCount = 0;
