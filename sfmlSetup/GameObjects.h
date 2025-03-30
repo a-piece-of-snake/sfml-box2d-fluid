@@ -32,7 +32,7 @@ namespace GameObjects
         float Impact = 4.f;
         float FORCE_MULTIPLIER = -2000.0f;
         float FORCE_SURFACE = 0.75f;
-        float MomentumCoefficient = 1.0f;
+        float MomentumCoefficient = 1.f;
     };
     struct ParticleGroup{
         std::vector<GameObjects::Particle> Particles;

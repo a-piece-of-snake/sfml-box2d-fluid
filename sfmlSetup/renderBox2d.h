@@ -12,6 +12,15 @@
 
 namespace renderB2
 {
+    namespace DefaultColors {
+        extern sf::Color ClearFill;
+        extern sf::Color BackGroundOutline;
+        extern sf::Color WarningOutline;
+        extern sf::Color WarningText;
+        extern sf::Color TextBox;
+        extern sf::Color B2BodyFill;
+    }
+    extern sf::Font DefaultFont;
     sf::Font getDefaultFont();
     sf::Font& getDefaultFontAddress();
     void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text);

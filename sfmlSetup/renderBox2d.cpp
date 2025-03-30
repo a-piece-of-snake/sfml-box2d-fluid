@@ -11,6 +11,14 @@
 #include "MathUtils.h"
 namespace renderB2
 {
+	namespace DefaultColors {
+		sf::Color ClearFill = sf::Color{ 1, 14, 22 };
+		sf::Color BackGroundOutline = sf::Color{ 0, 98, 167 };
+		sf::Color WarningOutline = sf::Color{ 136, 0, 27 };
+		sf::Color WarningText = sf::Color{ 222, 33, 40 };
+		sf::Color TextBox = sf::Color{ 2, 66, 110, 133 };
+		sf::Color B2BodyFill = sf::Color{ 255, 255, 255, 85 };
+	}
 	sf::Font DefaultFont("Assets\\Fonts\\NanoDyongSong.ttf");
 
 	sf::Font getDefaultFont() {
@@ -105,7 +113,7 @@ namespace renderB2
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
 
-		shape.setPosition({ pos.y, screensettings.width / 2.0f - pos.x});
+		shape.setPosition({ pos.y, pos.x});
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);

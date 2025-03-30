@@ -19,11 +19,17 @@
 #include <numeric>
 int width = 2400;
 int height = 1350;
-int squareCount = 0;
-//test
+int particleCount = 0;
 sf::RenderWindow window(sf::VideoMode({ 2400, 1350 }), "AWA", sf::Style::Default);
 sf::View worldView(sf::FloatRect{ {0.f, 0.f}, {static_cast<float>(width), static_cast<float>(height)} });
 sf::View uiView = window.getDefaultView();
+
+sf::Clock timeclock;
+int tickCount = 0;
+sf::Clock tpsClock;
+float tps = 0.0f;
+sf::Time elapsed;
+float elapsedTime;
 
 sf::Vector2i lastmousePos;
 bool Drag = false;
@@ -108,6 +114,7 @@ void CreateParticle(float radius, float x, float y, float density, float frictio
     shapeDef.density = density;
     shapeDef.friction = friction;
     shapeDef.restitution = restitution;
+    shapeDef.enableContactEvents = true;
     /*
     {
         b2Filter filter;
@@ -181,7 +188,6 @@ static bool QueryCallback(int proxyId, int userData, void* context) {
     return true;
 }
 
-
 void ComputeParticleForces() {
     //石山代码qwq
     for (auto p : fluid.Particles) {
@@ -203,7 +209,7 @@ void ComputeParticleForces() {
             float effectiveRange = (radiusA + radiusB) * fluid.Config.Impact;
             if (dst == 0.f) {
                 float randomAngle = (std::rand() / (float)RAND_MAX) * 2 * B2_PI;
-                b2Vec2 randomForce = b2Vec2{ std::cos(randomAngle), std::sin(randomAngle) } * 0.001f;
+                b2Vec2 randomForce = b2Vec2{ std::cos(randomAngle), std::sin(randomAngle) } *0.001f;
                 other->nextTickForce += randomForce;
                 p.nextTickForce -= randomForce;
                 //b2Body_ApplyForceToCenter(other->bodyId, randomForce, true);
@@ -242,13 +248,99 @@ void ComputeParticleForces() {
         }
     }
 }
+void ParticleAdhesion(b2ContactEvents contactEvents) {
 
+    for (int i = 0; i < contactEvents.beginCount; ++i)
+    {
+        b2ContactBeginTouchEvent event = contactEvents.beginEvents[i];
+        b2BodyId bodyIdA = b2Shape_GetBody(event.shapeIdA);
+        b2BodyId bodyIdB = b2Shape_GetBody(event.shapeIdB);
+    }
+}
+void RenderUi() {
+    {
+        sf::ConvexShape ticktime = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+        ticktime.setFillColor(sf::Color::Transparent);
+        ticktime.setOutlineThickness(3.f);
+        ticktime.move({ 8.f, 25.f });
+        //test.setPosition({ (float)mousePos.x, (float)mousePos.y });
+        sf::Text awa(renderB2::getDefaultFontAddress());
+        awa.setString("Tick Time\n  " + std::to_string((int)elapsedTime) + " ms");
+        awa.setStyle(sf::Text::Bold);
+        awa.setCharacterSize(40.f);
+        if (elapsedTime >= 100) {
+            ticktime.setOutlineColor(renderB2::DefaultColors::WarningOutline);
+            awa.setFillColor(renderB2::DefaultColors::WarningText);
+        }
+        else {
+            ticktime.setOutlineColor(sf::Color::White);
+            awa.setFillColor(sf::Color::White);
+        }
+        renderB2::renderTextInShape(&window, ticktime, awa);
+    }
+    {
+        if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+            tps = tickCount / tpsClock.getElapsedTime().asSeconds();
+            tickCount = 0;
+            tpsClock.restart();
+        }
+        sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+        tpsshape.setFillColor(sf::Color::Transparent);
+        tpsshape.setOutlineThickness(3.f);
+        tpsshape.move({ 8.f, 151.f });
+        sf::Text awa(renderB2::getDefaultFontAddress());
+        awa.setString("TPS\n" + std::to_string((int)tps));
+        awa.setStyle(sf::Text::Bold);
+        awa.setCharacterSize(40.f);
+        if (tps <= 10) {
+            tpsshape.setOutlineColor(renderB2::DefaultColors::WarningOutline);
+            awa.setFillColor(renderB2::DefaultColors::WarningText);
+        }
+        else {
+            tpsshape.setOutlineColor(sf::Color::White);
+            awa.setFillColor(sf::Color::White);
+        }
+        renderB2::renderTextInShape(&window, tpsshape, awa);
+    }
+    {
+        if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+            tps = tickCount / tpsClock.getElapsedTime().asSeconds();
+            tickCount = 0;
+            tpsClock.restart();
+        }
+        sf::ConvexShape particlecount = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+        particlecount.setFillColor(sf::Color::Transparent);
+        particlecount.setOutlineColor(sf::Color::White);
+        particlecount.setOutlineThickness(3.f);
+        particlecount.move({ 8.f, 277.f });
+        sf::Text awa(renderB2::getDefaultFontAddress());
+        awa.setString("Particle Count\n     " + std::to_string(particleCount));
+        awa.setStyle(sf::Text::Bold);
+        awa.setCharacterSize(40.f);
+        awa.setFillColor(sf::Color::White);
+        renderB2::renderTextInShape(&window, particlecount, awa);
+    }
+    {
+        sf::RectangleShape tutorial;
+        tutorial.setSize({ 330.f, 330.f });
+        tutorial.setFillColor(renderB2::DefaultColors::TextBox);
+        tutorial.setOutlineThickness(3.f);
+        tutorial.setOutlineColor(sf::Color::White);
+        tutorial.move({ 8.f, 403 });
+        sf::Text awa(renderB2::getDefaultFontAddress());
+        awa.setString("LShift: Drag-select\narea to create\nparticles\nNum1: Box\nNum2: Particle\nRMB: Clear\nSpace: Pause");
+        awa.setStyle(sf::Text::Bold);
+        awa.setCharacterSize(33.f);
+        awa.setFillColor(sf::Color::White);
+        renderB2::renderTextInShape(&window, tutorial, awa);
+    }
+}
 int main() {
     window.setFramerateLimit(60);
     sf::View view(sf::FloatRect({ 0.f, 0.f }, { (float)width, (float)height }));
     window.setView(view);
     dynamicTree = b2DynamicTree_Create();
-    int numThreads = std::thread::hardware_concurrency(); 
+    int numThreads = std::thread::hardware_concurrency();
     if (numThreads == 0) numThreads = 4;
     //else if (numThreads > 4) numThreads = 4;
     b2WorldDef worldDef = b2DefaultWorldDef();
@@ -292,8 +384,8 @@ int main() {
     int subStepCount = 10;
     renderB2::RenderSettings rendersettings;
     rendersettings.OutlineThickness = 1;
-    rendersettings.OutlineColor = sf::Color{ 255, 255, 255, 255 };
-    rendersettings.FillColor = sf::Color{ 255, 255, 255, 85 };
+    rendersettings.OutlineColor = sf::Color::White;
+    rendersettings.FillColor = renderB2::DefaultColors::B2BodyFill;
     rendersettings.verticecount = 4;
 
     sf::Texture BackGroundT("Assets\\Textures\\BackGround.png");
@@ -302,21 +394,17 @@ int main() {
     sf::RectangleShape BackGround({ (float)width - 350 * 2, (float)height - 25.f * 2 });
     BackGround.move({ 350.f, 25.f });
     BackGround.setOutlineThickness(3);
-    BackGround.setOutlineColor(sf::Color(0, 98, 167));
+    BackGround.setOutlineColor(renderB2::DefaultColors::BackGroundOutline);
     BackGround.setTexture(&BackGroundT);
     BackGround.setTextureRect(sf::IntRect{ { 0, 0 }, { (int)(BackGround.getSize().x / 1.5), (int)(BackGround.getSize().y / 1.5) } });
-
-    sf::Clock clock;
-    int tickCount = 0;
-    sf::Clock tpsClock;
-    float tps = 0.0f;
 
     {
         fluid.Config.FORCE_SURFACE = 0.3f;
     }
+
     while (window.isOpen()) {
-        sf::Time elapsed = clock.restart(); 
-        float elapsedTime = elapsed.asMilliseconds(); 
+        elapsed = timeclock.restart();
+        elapsedTime = elapsed.asMilliseconds();
         while (const std::optional event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) {
                 window.close();
@@ -344,7 +432,7 @@ int main() {
                             float x = minX + i * stepX + stepX / 2;
                             float y = minY + j * stepY + stepY / 2;
                             CreateParticle(4, x - camX, y + camY, 2.5f, 0.f, 0.25f);
-                            squareCount++;
+                            particleCount++;
                         }
                     }
                     selection.isSelecting = false;
@@ -370,7 +458,7 @@ int main() {
         b2Vec2 worldPos = toWorldPosition(mousePos.x, mousePos.y, worldView);
         //std::cout << worldPos.x << " " << worldPos.y << std::endl;
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num2)) {
-            squareCount++;
+            particleCount++;
             CreateParticle(4, worldPos.x - camX, worldPos.y + camY, 2.5f, 0.f, 0.25f);
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num1)) {
@@ -387,7 +475,7 @@ int main() {
             }
             squares.clear();
             fluid.Particles.clear();
-            squareCount = 0;
+            particleCount = 0;
             std::cout << "All deleted." << std::endl;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
@@ -439,6 +527,7 @@ int main() {
                 }
             }
             ComputeParticleForces();
+            ParticleAdhesion(b2World_GetContactEvents(world.worldId));
             for (const auto& p : fluid.Particles) {
                 b2Body_ApplyLinearImpulseToCenter(p.bodyId, p.nextTickLinearImpulse, true);
                 b2Body_ApplyForceToCenter(p.bodyId, p.nextTickForce, true);
@@ -474,7 +563,7 @@ int main() {
                 squares.push_back({ bodyId, square });
             }
         }
-        window.clear(sf::Color{ 1, 14, 22 });
+        window.clear(renderB2::DefaultColors::ClearFill);
         window.setView(worldView);
         BackGround.setTextureRect(sf::IntRect{ { (int)-(BackGround.getSize().x / 3), (int)-(BackGround.getSize().y / 3) }, { (int)(BackGround.getSize().x / 1.5), (int)(BackGround.getSize().y / 1.5) } });
         window.setView(uiView);
@@ -500,6 +589,20 @@ int main() {
         }
         rendersettings.verticecount = 4;
 
+        for (int i = 0; i < b2World_GetContactEvents(world.worldId).beginCount; ++i)
+        {
+            b2ContactBeginTouchEvent event = b2World_GetContactEvents(world.worldId).beginEvents[i];
+            b2BodyId bodyIdA = b2Shape_GetBody(event.shapeIdA);
+            b2BodyId bodyIdB = b2Shape_GetBody(event.shapeIdB);
+            b2Transform transform = b2Body_GetTransform(bodyIdA);
+            b2Vec2 pos = transform.p;
+            sf::CircleShape marker(6.0f);
+            marker.setPosition({ pos.y, pos.x });
+            marker.setFillColor(sf::Color::Red);
+            window.draw(marker);
+            std::cout << pos.x << " " << pos.y << std::endl;
+        }
+
         window.setView(uiView);
         if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) || sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
             sf::CircleShape shape(Dragdef.radius, 32);
@@ -523,91 +626,16 @@ int main() {
             selectionBox.setOutlineThickness(2);
             window.draw(selectionBox);
         }
-
         {
-            sf::RectangleShape backgroundBorder = BackGround; 
-            backgroundBorder.move({ -BackGround.getOutlineThickness(), -BackGround.getOutlineThickness()});
-			backgroundBorder.setSize({ BackGround.getSize().x + BackGround.getOutlineThickness() * 2, BackGround.getSize().y + BackGround.getOutlineThickness() * 2 });
-            backgroundBorder.setFillColor(sf::Color::Transparent); 
-            backgroundBorder.setOutlineColor(sf::Color{ 1, 14, 22 });
-            backgroundBorder.setOutlineThickness(1000.0f);        
+            sf::RectangleShape backgroundBorder = BackGround;
+            backgroundBorder.move({ -BackGround.getOutlineThickness(), -BackGround.getOutlineThickness() });
+            backgroundBorder.setSize({ BackGround.getSize().x + BackGround.getOutlineThickness() * 2, BackGround.getSize().y + BackGround.getOutlineThickness() * 2 });
+            backgroundBorder.setFillColor(sf::Color::Transparent);
+            backgroundBorder.setOutlineColor(renderB2::DefaultColors::ClearFill);
+            backgroundBorder.setOutlineThickness(1000.0f);
             window.draw(backgroundBorder);
         }
-        {
-            sf::ConvexShape ticktime = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-            ticktime.setFillColor(sf::Color::Transparent);
-            ticktime.setOutlineThickness(3.f);
-            ticktime.move({ 8.f, 25.f });
-            //test.setPosition({ (float)mousePos.x, (float)mousePos.y });
-            sf::Text awa(renderB2::getDefaultFontAddress());
-            awa.setString("Tick Time\n  " + std::to_string((int)elapsedTime) + " ms");
-            awa.setStyle(sf::Text::Bold);
-            awa.setCharacterSize(40.f);
-            if (elapsedTime >= 100) {
-                ticktime.setOutlineColor(sf::Color{ 136, 0, 27 });
-                awa.setFillColor(sf::Color{ 222, 33, 40 });
-            }
-            else {
-                ticktime.setOutlineColor(sf::Color::White);
-                awa.setFillColor(sf::Color::White);
-            }
-            renderB2::renderTextInShape(&window, ticktime, awa);
-        }
-        {
-            if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-                tps = tickCount / tpsClock.getElapsedTime().asSeconds();
-                tickCount = 0;
-                tpsClock.restart();
-            }
-            sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-            tpsshape.setFillColor(sf::Color::Transparent);
-            tpsshape.setOutlineThickness(3.f);
-            tpsshape.move({ 8.f, 151.f });
-            sf::Text awa(renderB2::getDefaultFontAddress());
-            awa.setString("TPS\n" + std::to_string((int)tps));
-            awa.setStyle(sf::Text::Bold);
-            awa.setCharacterSize(40.f);
-            if (tps <= 10) {
-                tpsshape.setOutlineColor(sf::Color{ 136, 0, 27 });
-                awa.setFillColor(sf::Color{ 222, 33, 40 });
-            } else {
-                tpsshape.setOutlineColor(sf::Color::White);
-                awa.setFillColor(sf::Color::White);
-            }
-            renderB2::renderTextInShape(&window, tpsshape, awa);
-        }
-        {
-            if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-                tps = tickCount / tpsClock.getElapsedTime().asSeconds();
-                tickCount = 0;
-                tpsClock.restart();
-            }
-            sf::ConvexShape particlecount = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-            particlecount.setFillColor(sf::Color::Transparent);
-            particlecount.setOutlineColor(sf::Color::White);
-            particlecount.setOutlineThickness(3.f);
-            particlecount.move({ 8.f, 277.f });
-            sf::Text awa(renderB2::getDefaultFontAddress());
-            awa.setString("Particle Count\n     " + std::to_string(squareCount));
-            awa.setStyle(sf::Text::Bold);
-            awa.setCharacterSize(40.f);
-            awa.setFillColor(sf::Color::White);
-            renderB2::renderTextInShape(&window, particlecount, awa);
-        }
-        {
-            sf::RectangleShape tutorial;
-			tutorial.setSize({ 330.f, 330.f });
-            tutorial.setFillColor(sf::Color{ 2, 66, 110, 133 });
-            tutorial.setOutlineThickness(3.f);
-			tutorial.setOutlineColor(sf::Color::White);
-            tutorial.move({ 8.f, 403 });
-            sf::Text awa(renderB2::getDefaultFontAddress());
-            awa.setString("LShift: Drag-select\narea to create\nparticles\nNum1: Box\nNum2: Particle\nRMB: Clear\nSpace: Pause");
-            awa.setStyle(sf::Text::Bold);
-            awa.setCharacterSize(33.f);
-            awa.setFillColor(sf::Color::White);
-            renderB2::renderTextInShape(&window, tutorial, awa);
-        }
+        RenderUi();
         window.display();
         lastmousePos = mousePos;
         tickCount++;
