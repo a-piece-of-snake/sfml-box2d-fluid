@@ -40,15 +40,14 @@ namespace renderB2
 	}
 	void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text) {
 		sf::FloatRect shapeBounds = shape.getGlobalBounds();
-		sf::FloatRect shapeLocalBounds = shape.getLocalBounds();
 		sf::FloatRect textBounds = text.getLocalBounds();
-		float textX = shapeBounds.position.x + shapeLocalBounds.size.x / 2.f - textBounds.size.x / 2.f;// -(textBounds.width / 2.0f);
-		float textY = shapeBounds.position.y + shapeLocalBounds.size.y / 2.f - textBounds.size.y / 1.5f;// -(textBounds.height / 2.0f);
-
+		float textX = shapeBounds.getCenter().x - (textBounds.size.x) / 2.0f;
+		float textY = shapeBounds.getCenter().y - (textBounds.size.y) / 2.0f;
 		text.setPosition({ textX, textY });
 		window->draw(shape);
 		window->draw(text);
 	}
+
 	sf::ConvexShape getRectangleMinusCorners(float Width, float Length, float Subtract) {
 		sf::ConvexShape convex;
 		convex.setPointCount(8);
@@ -76,6 +75,22 @@ namespace renderB2
 		}
 		return;
 	}
+	void SFMLrenderShadow(sf::RenderWindow* window, sf::Shape* shape, float Thickness, int repeat, sf::Color Color) {
+		float shapeoutlinethickness = shape->getOutlineThickness();
+		sf::Color shapeoutlinecolor = shape->getOutlineColor();
+		float thickness = Thickness / repeat;
+		sf::Color color = Color;
+		color.a /= repeat;
+		sf::Shape* shadow = shape;
+		shadow->setOutlineColor(color);
+		for (int i = 1; i <= repeat; i++) {
+			shadow->setOutlineThickness(thickness * i + shape->getOutlineThickness());
+			window->draw(*shadow);
+		}
+		shape->setOutlineColor(shapeoutlinecolor);
+		shape->setOutlineThickness(shapeoutlinethickness);
+		return;
+	}
 	void renderb2Polygon(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Polygon polygon, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
 		sf::ConvexShape shape;
 		shape.setPointCount(rendersettings.verticecount);
@@ -85,6 +100,7 @@ namespace renderB2
 			float screenY = screensettings.height / 2.0f - localVertex.y;
 			shape.setPoint(i, sf::Vector2f(screenY, screenX));
 		}
+		/*
 		sf::Vector2f minPoint(FLT_MAX, FLT_MAX), maxPoint(-FLT_MAX, -FLT_MAX);
 		for (size_t i = 0; i < shape.getPointCount(); i++) {
 			sf::Vector2f point = shape.getPoint(i);
@@ -95,11 +111,13 @@ namespace renderB2
 		}
 		sf::Vector2f center = (minPoint + maxPoint) / 2.f;
 		shape.setOrigin(center);
+		*/
+		shape.setOrigin({ shape.getLocalBounds().getCenter().x, shape.getLocalBounds().getCenter().y});
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
-		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
+		float angle = atan2(transform.q.s, transform.q.c) * 180.0f / B2_PI;
 
-		shape.setPosition({ pos.y, pos.x });
+		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);
@@ -113,7 +131,7 @@ namespace renderB2
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
 
-		shape.setPosition({ pos.y, pos.x});
+		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);
@@ -125,7 +143,7 @@ namespace renderB2
 		shape.setOrigin({ circle.radius, circle.radius });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
-		shape.setPosition({ pos.y, pos.x });
+		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
 		shape.setRotation(sf::degrees(90));
 		setRenderSettings(&shape, rendersettings);
 		window->draw(shape);

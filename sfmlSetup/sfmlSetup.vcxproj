@@ -24,7 +24,7 @@
     <ProjectGuid>{d16ba13e-46bf-4847-a254-eebb12147f7a}</ProjectGuid>
     <RootNamespace>sfmlSetup</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>sfmlExample</ProjectName>
+    <ProjectName>SFML-Box2d-fluid</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -139,6 +139,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MathUtils.cpp" />
     <ClCompile Include="renderBox2d.cpp" />
+    <ClCompile Include="GameObjects.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="GameObjects.h" />

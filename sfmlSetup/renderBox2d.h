@@ -20,6 +20,7 @@ namespace renderB2
         extern sf::Color TextBox;
         extern sf::Color B2BodyFill;
     }
+
     extern sf::Font DefaultFont;
     sf::Font getDefaultFont();
     sf::Font& getDefaultFontAddress();
@@ -42,6 +43,7 @@ namespace renderB2
         int camY;
     };
     void setRenderSettings(sf::Shape* shape, renderB2::RenderSettings rendersettings);
+    void SFMLrenderShadow(sf::RenderWindow* window, sf::Shape* shape, float Thickness, int repeat, sf::Color Color);
     void renderb2Polygon(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Polygon polygon, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
