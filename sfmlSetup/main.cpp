@@ -9,6 +9,7 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <SFML/System.hpp>
+#include <SFML/Audio.hpp>
 #include "renderBox2d.h"
 #include "GameObjects.h"
 #include "MathUtils.h"
@@ -18,6 +19,7 @@
 #include <thread>
 #include <vector>
 #include <numeric>
+#include <sstream> 
 
 int width = 2400;
 int height = 1350;
@@ -38,50 +40,6 @@ float elapsedTime;
 sf::Vector2i lastmousePos;
 bool Drag = false;
 GameObjects::World world;
-/*
-class EditableTextBox {
-public:
-    EditableTextBox(float x, float y, float width, float height, const sf::Font& font)
-        : isEditing(false) {
-        // 设置文本框的形状
-        box.setSize({ width, height });
-        box.setPosition({ x, y });
-        box.setFillColor(sf::Color::White);
-        box.setOutlineColor(sf::Color::Black);
-        box.setOutlineThickness(2.f);
-
-        // 设置文本
-        text.setFont(font);
-        text.setCharacterSize(24);
-        text.setFillColor(sf::Color::Black);
-        text.setPosition({ x + 5.f, y + 5.f });
-    }
-
-    void handleEvent(const sf::Event& event, const sf::RenderWindow& window) {
-        if(isEditing&& const auto* textentered = event.getIf<sf::Event::TextEntered>()) {
-            if (event.text.unicode == '\b') { // 处理退格键
-                if (!inputString.empty()) {
-                    inputString.pop_back();
-                }
-            } else if (event.text.unicode < 128) { // 处理其他字符
-                inputString += static_cast<char>(event.text.unicode);
-            }
-            text.setString(inputString);
-        }
-    }
-
-    void draw(sf::RenderWindow& window) {
-        window.draw(box);
-        window.draw(text);
-    }
-
-private:
-    sf::RectangleShape box;
-    sf::Text text;
-    std::string inputString;
-    bool isEditing;
-};
-*/
 struct SelectionBox {
     bool isSelecting = false;
     sf::Vector2f startPos;
@@ -160,12 +118,11 @@ void RenderUi() {
         sf::ConvexShape ticktime = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
         ticktime.setFillColor(sf::Color::Transparent);
         ticktime.setOutlineThickness(3.f);
-        ticktime.move({ 8.f, 25.f });
-        //test.setPosition({ (float)mousePos.x, (float)mousePos.y });
+        renderB2::MyUIObject* root = new renderB2::MyUIObject(&ticktime, { 0, 0 }, 0);
         sf::Text awa(renderB2::getDefaultFontAddress());
         awa.setString("Tick Time\n  " + std::to_string((int)elapsedTime) + " ms");
         awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(40.f);
+        awa.setCharacterSize(30.f);
         if (elapsedTime >= 100) {
             ticktime.setOutlineColor(renderB2::DefaultColors::WarningOutline);
             awa.setFillColor(renderB2::DefaultColors::WarningText);
@@ -174,7 +131,12 @@ void RenderUi() {
             ticktime.setOutlineColor(sf::Color::White);
             awa.setFillColor(sf::Color::White);
         }
-        renderB2::renderTextInShape(&window, ticktime, awa);
+        awa.setOrigin({ awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 });
+        renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
+        child->localPosition = { ticktime.getLocalBounds().size.x / 2, ticktime.getLocalBounds().size.y / 2 };
+        root->addChild(child);
+        root->localPosition = { 8.f, 25.f };
+        root->draw(&window);
     }
     {
         if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
@@ -185,11 +147,11 @@ void RenderUi() {
         sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
         tpsshape.setFillColor(sf::Color::Transparent);
         tpsshape.setOutlineThickness(3.f);
-        tpsshape.move({ 8.f, 151.f });
+        renderB2::MyUIObject* root = new renderB2::MyUIObject(&tpsshape, { 0, 0 }, 0);
         sf::Text awa(renderB2::getDefaultFontAddress());
         awa.setString("TPS\n" + std::to_string((int)tps));
         awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(40.f);
+        awa.setCharacterSize(30.f);
         if (tps <= 10) {
             tpsshape.setOutlineColor(renderB2::DefaultColors::WarningOutline);
             awa.setFillColor(renderB2::DefaultColors::WarningText);
@@ -198,7 +160,12 @@ void RenderUi() {
             tpsshape.setOutlineColor(sf::Color::White);
             awa.setFillColor(sf::Color::White);
         }
-        renderB2::renderTextInShape(&window, tpsshape, awa);
+        awa.setOrigin({ awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 });
+        renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
+        child->localPosition = { tpsshape.getLocalBounds().size.x / 2, tpsshape.getLocalBounds().size.y / 2 };
+        root->addChild(child);
+        root->localPosition = { 8.f, 151.f };
+        root->draw(&window);
     }
     {
         if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
@@ -210,13 +177,18 @@ void RenderUi() {
         particlecount.setFillColor(sf::Color::Transparent);
         particlecount.setOutlineColor(sf::Color::White);
         particlecount.setOutlineThickness(3.f);
-        particlecount.move({ 8.f, 277.f });
+        renderB2::MyUIObject* root = new renderB2::MyUIObject(&particlecount, { 0, 0 }, 0);
         sf::Text awa(renderB2::getDefaultFontAddress());
         awa.setString("Particle Count\n     " + std::to_string(particleCount));
         awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(40.f);
+        awa.setCharacterSize(30.f);
         awa.setFillColor(sf::Color::White);
-        renderB2::renderTextInShape(&window, particlecount, awa);
+        awa.setOrigin({ awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 });
+        renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
+        child->localPosition = { particlecount.getLocalBounds().size.x  / 2, particlecount.getLocalBounds().size.y / 2 };
+        root->addChild(child);
+        root->localPosition = { 8.f, 277.f };
+        root->draw(&window);
     }
     {
         sf::RectangleShape tutorial;
@@ -224,31 +196,20 @@ void RenderUi() {
         tutorial.setFillColor(renderB2::DefaultColors::TextBox);
         tutorial.setOutlineThickness(3.f);
         tutorial.setOutlineColor(sf::Color::White);
-        tutorial.move({ 8.f, 403 });
+        renderB2::MyUIObject* root = new renderB2::MyUIObject(&tutorial, { 0, 0 }, 0);
         sf::Text awa(renderB2::getDefaultFontAddress());
         awa.setString("LShift: Drag-select\narea to create\nparticles\nNum1: Box\nNum2: Particle\nRMB: Clear\nSpace: Pause");
         awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(33.f);
+        awa.setCharacterSize(30.f);
         awa.setFillColor(sf::Color::White);
-        renderB2::renderTextInShape(&window, tutorial, awa);
+        awa.setOrigin( { awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 } );
+        renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
+        child->localPosition = { tutorial.getLocalBounds().size.x / 2, tutorial.getLocalBounds().size.y / 2 };
+        root->addChild(child);
+        root->localPosition = { 8.f, 403 };
+        root->draw(&window);
     }
 
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
-        sf::RectangleShape shadow;
-        shadow.setSize({ 330.f, 330.f });
-        shadow.setFillColor(sf::Color::White);
-		shadow.setOutlineThickness(5.f);
-		shadow.setOutlineColor(sf::Color::Blue);
-        shadow.move({ (float)mousePos.x, (float)mousePos.y });
-        sf::Text awa(renderB2::getDefaultFontAddress());
-        awa.setString("AWA");
-        awa.setFillColor(sf::Color::Black);
-        awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(33.f);
-        awa.setFillColor(sf::Color::White);
-        renderB2::SFMLrenderShadow(&window, &shadow, 2, 20, sf::Color::Black);
-        renderB2::renderTextInShape(&window, shadow, awa);
-    }
 }
 int main() {
     window.setFramerateLimit(60);
@@ -259,6 +220,7 @@ int main() {
     //else if (numThreads > 4) numThreads = 4;
     b2WorldDef worldDef = b2DefaultWorldDef();
     worldDef.gravity = b2Vec2{ -2.5f, 0.0f };
+    //worldDef.gravity = b2Vec2{ 0.0f, 0.0f };
     worldDef.contactHertz = 15.f;
     worldDef.enableContinuous = false;
     worldDef.workerCount = numThreads;
@@ -312,10 +274,86 @@ int main() {
     BackGround.setOutlineColor(renderB2::DefaultColors::BackGroundOutline);
     BackGround.setTexture(&BackGroundT);
     BackGround.setTextureRect(sf::IntRect{ { 0, 0 }, { (int)(BackGround.getSize().x / 1.5), (int)(BackGround.getSize().y / 1.5) } });
-
+    /*
+    //smoke
     {
-        //fluid.Config.FORCE_SURFACE = 0.3f;
+        fluid.Config.FORCE_SURFACE = 0.f;
+        fluid.Config.Impact = 5.f;
+        fluid.Config.FORCE_MULTIPLIER = -100.f;
     }
+    */
+
+    sf::RectangleShape* rect = new sf::RectangleShape(sf::Vector2f(400.f, 400.f));
+    rect->setFillColor(renderB2::DefaultColors::TextBox);
+    renderB2::MyUIObject* root = new renderB2::MyUIObject(rect, { 2000, 0 }, particleCount);
+    sf::Text* awa = new sf::Text(renderB2::getDefaultFontAddress());
+    awa->setString(std::to_string(fluid.Config.FORCE_SURFACE));
+    awa->setFillColor(sf::Color::Black);
+    awa->setStyle(sf::Text::Bold);
+    awa->setCharacterSize(30.f);
+    awa->setFillColor(sf::Color::White);
+    renderB2::MyUIObject* child = new renderB2::MyUIObject(awa, sf::Vector2f(50.f, 0.f));
+    root->addChild(child);
+
+    sf::RectangleShape* buttonShape = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+    renderB2::UIButton* lbutton = new renderB2::UIButton(buttonShape, sf::Vector2f(0.f, 0.f));
+    renderB2::UIButton* rbutton = new renderB2::UIButton(buttonShape, sf::Vector2f(150.f, 0.f));
+    root->addChild(lbutton);
+    root->addChild(rbutton);
+    sf::RectangleShape* sliderShape = new sf::RectangleShape(sf::Vector2f(500.f, 50.f));
+    sliderShape->setOutlineColor(renderB2::DefaultColors::BackGroundOutline);
+	sliderShape->setOutlineThickness(3.f);
+    sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+    buttonShape2->setFillColor(sf::Color::Red);
+    rbutton->onHover = [rbutton]() {
+        sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+        buttonShape2->setFillColor(sf::Color::Green);
+        rbutton->shape = buttonShape2;
+        };
+    rbutton->onClick = [rbutton]() {
+        sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+        buttonShape2->setFillColor(sf::Color::Red);
+        rbutton->shape = buttonShape2;
+        fluid.Config.PLASTICITY_RATE += 1.f;
+        rbutton->ClickSound.play();
+        };
+    rbutton->onRelease = [rbutton]() {
+        rbutton->ReleaseSound.play();
+        };
+
+    lbutton->onHover = [lbutton]() {
+        sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+        buttonShape2->setFillColor(sf::Color::Green);
+        lbutton->shape = buttonShape2;
+        };
+    lbutton->onClick = [lbutton]() {
+        sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
+        buttonShape2->setFillColor(sf::Color::Red);
+        lbutton->shape = buttonShape2;
+        fluid.Config.PLASTICITY_RATE -= 1.f;
+        lbutton->ClickSound.play();
+        };
+    lbutton->onRelease = [lbutton]() {
+        lbutton->ReleaseSound.play();
+        };
+    renderB2::UISlider* slider = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 500.f, fluid.Config.FORCE_SURFACE, sf::Vector2f(0.f, 0.f),
+         0.f, sf::Vector2f(1.f, 1.f));
+    sf::Text* awa2 = new sf::Text(renderB2::getDefaultFontAddress());
+    awa2->setString(std::to_string(slider->Value));
+    awa2->setFillColor(sf::Color::Black);
+    awa2->setStyle(sf::Text::Bold);
+    awa2->setCharacterSize(30.f);
+    awa2->setFillColor(sf::Color::Black);
+    renderB2::MyUIObject* child2 = new renderB2::MyUIObject(awa2, sf::Vector2f(50.f, 0.f));
+    slider->addChild(child2);
+    slider->localPosition = { 50.f, 50.f };
+	slider->onValueChange = [slider, awa2]() {
+        std::ostringstream oss2;
+        oss2 << std::fixed << std::setprecision(2) << slider->Value;
+        awa2->setString(oss2.str());
+		fluid.Config.FORCE_SURFACE = slider->Value;
+		};
+
     while (window.isOpen()) {
         window.clear(renderB2::DefaultColors::ClearFill);
         elapsed = timeclock.restart();
@@ -338,7 +376,8 @@ int main() {
                     float maxY = std::max(start.y, end.y);
                     float Xlen = std::abs(maxX - minX);
                     float Ylen = std::abs(maxY - minY);
-                    const float gridSize = 150;
+                    const float gridSize = 125;//water
+                    //const float gridSize = 75;
                     float stepX = (maxX - minX) / (Xlen * gridSize / window.getSize().x);
                     float stepY = (maxY - minY) / (Ylen * gridSize / window.getSize().y);
                     std::cout << "selection : x:" << (Xlen * gridSize / window.getSize().x) << "y:" << (Ylen * gridSize / window.getSize().y) << std::endl;
@@ -346,7 +385,8 @@ int main() {
                         for (int j = 0; j < (Ylen * gridSize / window.getSize().y); ++j) {
                             float x = minX + i * stepX + stepX / 2;
                             float y = minY + j * stepY + stepY / 2;
-                            fluid.CreateParticle(world, 4, x - camX, y + camY, 2.5f, 0.f, 0.25f);
+                            //fluid.CreateParticle(world, -0.1, 4, x - camX, y + camY, 1.0f, 0.f, 0.1f); // smoke
+                            fluid.CreateParticle(world, 1, 4, x - camX, y + camY, 2.5f, 0.f, 0.1f); // water
                             particleCount++;
                         }
                     }
@@ -367,6 +407,14 @@ int main() {
                 {
                     PauseWorld = !PauseWorld;
                 }
+                if (keyPressed->scancode == sf::Keyboard::Scan::F)
+                {
+                    fluid.freeze();
+                }
+                if (keyPressed->scancode == sf::Keyboard::Scan::G)
+                {
+                    fluid.unfreeze();
+                }
             }
         }
         mousePos = sf::Mouse::getPosition(window);
@@ -377,7 +425,8 @@ int main() {
         //std::cout << worldPos.x << " " << worldPos.y << std::endl;
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num2)) {
             particleCount++;
-            fluid.CreateParticle(world, 4, worldPos.x - camX, worldPos.y + camY, 2.5f, 0.f, 0.25f);
+            //fluid.CreateParticle(world, -0.1, 4, worldPos.x - camX, worldPos.y + camY, 1.0f, 0.f, 0.1f);// smoke
+            fluid.CreateParticle(world, 1, 4, worldPos.x - camX, worldPos.y + camY, 2.5f, 0.f, 0.1f);// water
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num1)) {
             createSquare(worldPos.x - camX, worldPos.y + camY);
@@ -404,16 +453,17 @@ int main() {
             Drag = true;
             sf::Vector2i mousePos = sf::Mouse::getPosition(window);
             Dragdef.position = b2Vec2{ worldPos.x - camX, worldPos.y + camY };
-            Dragdef.radius = 70.0f;
+            Dragdef.radius = 100.0f;
             Dragdef.falloff = 5.f;
-            Dragdef.impulsePerLength = -50.0f;
+            Dragdef.impulsePerLength = -70.0f;
             b2World_Explode(world.worldId, &Dragdef);
         }
+
         if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
             Drag = true;
             sf::Vector2i mousePos = sf::Mouse::getPosition(window);
             Dragdef.position = b2Vec2{ worldPos.x - camX, worldPos.y + camY };
-            Dragdef.radius = 25.0f;
+            Dragdef.radius = 50.0f;
             Dragdef.falloff = 0.f;
             Dragdef.impulsePerLength = 100.0f;
             b2World_Explode(world.worldId, &Dragdef);
@@ -443,7 +493,7 @@ int main() {
                     ++it;
                 }
             }
-            fluid.ComputeParticleForces();//here
+            fluid.ComputeParticleForces();
             for (const auto& p : fluid.Particles) {
                 b2Body_ApplyLinearImpulseToCenter(p.bodyId, p.nextTickLinearImpulse, true);
                 b2Body_ApplyForceToCenter(p.bodyId, p.nextTickForce, true);
@@ -504,9 +554,8 @@ int main() {
         }
 
         rendersettings.verticecount = 3;
-        for (auto& p : fluid.Particles) {
-            renderB2::rendersimpleparticle(&window, rendersettings, p.shape, p.bodyId, screensettings);
-        }
+        renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
+
         rendersettings.verticecount = 4;
         for (const auto& p : fluid.Particles) {
             std::vector<b2ContactData> contactData;
@@ -528,7 +577,7 @@ int main() {
                         shape.setFillColor(sf::Color::Red);
                         shape.setOrigin({ 2.5f, 2.5f });
                         shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
-                        window.draw(shape);
+                        //window.draw(shape);
                     }
                 }
             }
@@ -543,7 +592,7 @@ int main() {
                 b2Vec2 force = b2Joint_GetConstraintForce(joint);
                 b2Vec2 anchorA = b2Joint_GetLocalAnchorA(joint);// +b2Body_GetPosition(b2Joint_GetBodyA(p.AdhesionJoint[i]));
                 b2Vec2 anchorB = b2Joint_GetLocalAnchorB(joint);// +b2Body_GetPosition(b2Joint_GetBodyB(p.AdhesionJoint[i]));
-				std::cout << anchorB.x << " " << anchorB.y << std::endl;
+				//std::cout << anchorB.x << " " << anchorB.y << std::endl;
                 std::array line =
                 {
                     sf::Vertex{MathUtils::getSFpos(anchorA.x, anchorA.y)},
@@ -586,6 +635,23 @@ int main() {
         }
 
         RenderUi();
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2) << fluid.Config.PLASTICITY_RATE;
+            awa->setString(oss.str());
+
+            lbutton->shape = buttonShape;
+            rbutton->shape = buttonShape;
+
+            lbutton->tick(window);
+            rbutton->tick(window);
+            slider->tick(window);
+            root->drawShadow(&window, 5.f, 0.f, sf::Color::Blue);
+            root->draw(&window);
+            slider->draw(&window);
+        }
+
         window.display();
         lastmousePos = mousePos;
         tickCount++;
@@ -595,72 +661,3 @@ int main() {
     b2DestroyWorld(world.worldId);
     return 0;
 }
-/*
-void ComputeParticleForcesRange(std::vector<GameObjects::Particle>& particleSubset, std::vector<GameObjects::Particle>& allParticles) {
-    const float FORCE_MULTIPLIER = -500.0f;
-    for (auto& p : particleSubset) {
-        QueryContext ctx;
-        ctx.current = &p;
-        //3月15号的蛇说 这里不要用 box2d 的方法 会导致 world 数量超过；
-        //
-        ///*
-        b2Vec2 posA = p.pos;//here
-        float influenceRange = p.shape.radius * 3.f;
-        b2AABB queryAABB;
-        queryAABB.lowerBound = posA - b2Vec2{ influenceRange / 2, influenceRange / 2 };
-        queryAABB.upperBound = posA + b2Vec2{ influenceRange / 2, influenceRange / 2 };
-        b2DynamicTree_Query(&dynamicTree, queryAABB, B2_DEFAULT_MASK_BITS, QueryCallback, &ctx);
-        float radiusA = p.shape.radius / (p.shape.radius / 3.f);
-         for (GameObjects::Particle* other : ctx.neighbors) {
-            b2Vec2 posB = other->pos;// b2Body_GetPosition(other->bodyId);
-            float radiusB = other->shape.radius / (p.shape.radius / 3.f);
-            b2Vec2 offset = posB - posA;
-            float dst = MathUtils::b2Vec2Length(offset) / (p.shape.radius / 3.f);
-            float effectiveRange = (radiusA + radiusB) * 3.f;
-
-            if (dst <= 0.01f) {
-                float randomAngle = (std::rand() / (float)RAND_MAX) * 2 * B2_PI;
-                b2Vec2 randomForce = b2Vec2{ std::cos(randomAngle), std::sin(randomAngle) } * 0.001f;
-                other->nextTickForce += randomForce;
-                p.nextTickForce += -randomForce;
-                //GameObjects::addForceToParticle(randomForce, other);
-                //GameObjects::addForceToParticle(-randomForce, &p);
-                //b2Body_ApplyForce(other->bodyId, randomForce, posB, true);
-                //b2Body_ApplyForce(p.bodyId, -randomForce, posA, true);
-                continue;
-            }
-            else if (dst < effectiveRange) {
-                //p.CloseParticles.push_back(&other);
-
-                float density = ctx.neighbors.size();
-                float densityForce = density / 50.f;
-                if (densityForce < 1.f) densityForce = 1.f;
-                else if (densityForce > 2.f) densityForce = 2.f;
-                b2Vec2 forceDir = MathUtils::b2Vec2Normalized(offset);
-                float distanceForceMag = GetForce(dst / densityForce, effectiveRange);
-                float repulsionMultiplier = 4.f;
-                b2Vec2 repulsionForce = (-FORCE_MULTIPLIER) * forceDir * distanceForceMag * repulsionMultiplier * 5 * effectiveRange;// *densityForce;
-                float momentumCoefficient = 2.5f;
-                b2Vec2 velA = p.LinearVelocity;// b2Body_GetLinearVelocity(p.bodyId);
-                b2Vec2 velB = other->LinearVelocity;// b2Body_GetLinearVelocity(other->bodyId);
-                b2Vec2 momentumForce = (velA - velB) * momentumCoefficient * ((effectiveRange - dst) / effectiveRange);
-                float d0 = radiusA + radiusB;
-                b2Vec2 springForce = b2Vec2_zero;
-                if (dst > d0) {
-                    float kSurface = 2.f * p.shape.radius;
-                    springForce = -kSurface * (dst - d0) * forceDir;
-                }
-                b2Vec2 totalForce = repulsionForce + momentumForce + springForce;
-                totalForce *= (p.shape.radius / 3.f);
-                //b2Body_ApplyForce(other->bodyId, totalForce, posB, true);
-                //b2Body_ApplyForce(p.bodyId, -totalForce, posA, true);
-                //GameObjects::addForceToParticle(totalForce, other);
-                //GameObjects::addForceToParticle(-totalForce, &p);
-                other->nextTickForce += totalForce;
-                p.nextTickForce += -totalForce;
-
-
-            }
-        }
-    }
-}*/
