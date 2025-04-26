@@ -8,7 +8,13 @@
 #include <SFML/Window.hpp>
 #include <SFML/System.hpp>
 #include <optional> 
-#include "ThreadPool.h"
+#include <cstdlib>
+#include <cmath>
+#include <mutex>
+#include <box2d/collision.h>
+#include <box2d/math_functions.h>
+#include "GameObjects.h"
+#include "MathUtils.h"
 namespace GameObjects
 {
 
@@ -19,26 +25,21 @@ namespace GameObjects
     };
 
     struct Particle {
-        b2BodyId bodyId;
-        b2ShapeId shapeId;
-        b2Circle shape;
-        int proxyId;
         int life = -1;
         int age = 0;
-		float mass = 1.f;
-        int neighborCount = 0;
-        int FreezeTime = 0;
+        float mass = 1.f;
         b2Vec2 pos = b2Vec2_zero;
         b2Vec2 LinearVelocity = b2Vec2_zero;
         b2Vec2 nextTickForce = b2Vec2_zero;
         b2Vec2 nextTickLinearImpulse = b2Vec2_zero;
+
+        b2BodyId bodyId;
+        b2ShapeId shapeId;
+        b2Circle shape;
+        int neighborCount = 0;
+        int FreezeTime = 0;
         std::vector<b2JointId> AdhesionJoint;
         std::unordered_map<Particle*, float> restDistance;
-        bool operator==(const Particle& other) const {
-            return bodyId.index1 == other.bodyId.index1 &&
-                shapeId.index1 == other.shapeId.index1 &&
-                proxyId == other.proxyId;
-        }
     };
 
 
@@ -46,13 +47,11 @@ namespace GameObjects
         float radius = 3.0f;
         float friction = 0.0f;
         float restitution = 0.25f;
-        float Impact = 3.f;
+        float Impact = 6.f;
         float FORCE_MULTIPLIER = -500.0f;
-        float FORCE_SURFACE = 10.f;
+        float FORCE_SURFACE = 50.f;
         float FORCE_ADHESION = 100.f;
         float MomentumCoefficient = 1.f;
-        float PLASTICITY_THRESHOLD = 0.2f;   // 相对应变阈值（20%）
-        float PLASTICITY_RATE = 0.1f;
     };
 
 
@@ -61,13 +60,31 @@ namespace GameObjects
         std::vector<GameObjects::Particle> Particles;
         GameObjects::ParticleConfig Config;
         b2DynamicTree dynamicTree;
-        std::unordered_map<int, GameObjects::Particle*> proxyMap;
+        std::vector<std::vector<Particle*>> gridBuckets;
+        int gridSizeX = 5000; 
+        int gridSizeY = 5000;
+        float cellSize = 10.0f;
 
-        ThreadPool* pool = nullptr;
-        void UpdateDynamicTree();
+        int getGridIndex(int x, int y) const {
+            x = std::clamp(x, 0, gridSizeX - 1);
+            y = std::clamp(y, 0, gridSizeY - 1);
+            return y * gridSizeX + x;
+        }
+
+        void clearGrid() {
+            for (auto& bucket : gridBuckets) {
+                bucket.clear();
+            }
+        }
+        const int prime1 = 6614058611;
+        const int prime2 = 7528850467;
+        const int hashMapSize = 50000;
+
+        int getHash2D(std::pair<int, int> gridPos);
+        std::pair<int, int> getGridPos(GameObjects::Particle& pariticle);
+        void UpdateData(GameObjects::World world);
         void CreateParticle(GameObjects::World world, float gravityScale, float radius, float x, float y, float density, float friction, float restitution);
         void DestroyParticle(GameObjects::World world, GameObjects::Particle* particle);
-        static bool QueryCallback(int proxyId, int userData, void* context);
         float GetForce(float dst, float radius);
         void freeze();
         void unfreeze();
@@ -75,17 +92,4 @@ namespace GameObjects
         void ComputeParticleForces();
 		std::mutex mutex;
     };
-
-    struct QueryContext {
-        GameObjects::Particle* current;
-        std::vector<GameObjects::Particle*> neighbors;
-        GameObjects::ParticleGroup* particleGroup;
-		float density = 0.f;
-    };
-    /*
-    void addForceToParticle(b2Vec2 force, GameObjects::Particle* particle)
-    {
-        particle->nextTickForce += force;
-        return;
-    }*/
 }

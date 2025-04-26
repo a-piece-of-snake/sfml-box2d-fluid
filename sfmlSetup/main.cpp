@@ -13,6 +13,7 @@
 #include "renderBox2d.h"
 #include "GameObjects.h"
 #include "MathUtils.h"
+#include "ThreadPool.h"
 #include <random>
 #include <iomanip>
 #include <functional>
@@ -46,6 +47,7 @@ struct SelectionBox {
     sf::Vector2f currentPos;
 } selection;
 bool PauseWorld = false;
+bool renderParticle = true;
 std::vector<std::pair<b2BodyId, b2Polygon>> squares;
 //std::vector<GameObjects::Particle> particles;
 GameObjects::ParticleGroup fluid;
@@ -213,6 +215,7 @@ void RenderUi() {
 }
 int main() {
     window.setFramerateLimit(60);
+    //static ThreadPool particlePool(std::thread::hardware_concurrency());
     sf::View view(sf::FloatRect({ 0.f, 0.f }, { (float)width, (float)height }));
     window.setView(view);
     int numThreads = std::thread::hardware_concurrency();
@@ -314,7 +317,7 @@ int main() {
         sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
         buttonShape2->setFillColor(sf::Color::Red);
         rbutton->shape = buttonShape2;
-        fluid.Config.PLASTICITY_RATE += 1.f;
+        fluid.Config.FORCE_SURFACE += 1.f;
         rbutton->ClickSound.play();
         };
     rbutton->onRelease = [rbutton]() {
@@ -330,13 +333,13 @@ int main() {
         sf::RectangleShape* buttonShape2 = new sf::RectangleShape(sf::Vector2f(50.f, 50.f));
         buttonShape2->setFillColor(sf::Color::Red);
         lbutton->shape = buttonShape2;
-        fluid.Config.PLASTICITY_RATE -= 1.f;
+        fluid.Config.FORCE_SURFACE -= 1.f;
         lbutton->ClickSound.play();
         };
     lbutton->onRelease = [lbutton]() {
         lbutton->ReleaseSound.play();
         };
-    renderB2::UISlider* slider = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 500.f, fluid.Config.FORCE_SURFACE, sf::Vector2f(0.f, 0.f),
+    renderB2::UISlider* slider = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 750.f, fluid.Config.FORCE_SURFACE, sf::Vector2f(0.f, 0.f),
          0.f, sf::Vector2f(1.f, 1.f));
     sf::Text* awa2 = new sf::Text(renderB2::getDefaultFontAddress());
     awa2->setString(std::to_string(slider->Value));
@@ -415,6 +418,10 @@ int main() {
                 {
                     fluid.unfreeze();
                 }
+                if (keyPressed->scancode == sf::Keyboard::Scan::P)
+                {
+                    renderParticle = !renderParticle;
+                }
             }
         }
         mousePos = sf::Mouse::getPosition(window);
@@ -480,26 +487,13 @@ int main() {
             squares.push_back({ bodyId, square });
         }
         if (!PauseWorld) {
-            for (auto it = fluid.Particles.begin(); it != fluid.Particles.end(); ) {
-                it->nextTickLinearImpulse = b2Vec2_zero;
-                it->nextTickForce = b2Vec2_zero;
-                it->pos = b2Body_GetPosition(it->bodyId);
-                it->LinearVelocity = b2Body_GetLinearVelocity(it->bodyId);
-                if (it->age >= it->life && it->life >= 0) {
-                    fluid.DestroyParticle(world, &(*it));
-                }
-                else {
-                    it->age++;
-                    ++it;
-                }
-            }
+            fluid.UpdateData(world);
             fluid.ComputeParticleForces();
             for (const auto& p : fluid.Particles) {
                 b2Body_ApplyLinearImpulseToCenter(p.bodyId, p.nextTickLinearImpulse, true);
                 b2Body_ApplyForceToCenter(p.bodyId, p.nextTickForce, true);
             }
             b2World_Step(world.worldId, timeStep, subStepCount);
-            fluid.UpdateDynamicTree();
             /*
             // 分割粒子数据
             int particlesPerThread = particles.size() / numThreads;
@@ -554,7 +548,9 @@ int main() {
         }
 
         rendersettings.verticecount = 3;
-        renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
+        if (renderParticle) {
+            renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
+        }
 
         rendersettings.verticecount = 4;
         for (const auto& p : fluid.Particles) {
@@ -638,7 +634,7 @@ int main() {
 
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
             std::ostringstream oss;
-            oss << std::fixed << std::setprecision(2) << fluid.Config.PLASTICITY_RATE;
+            oss << std::fixed << std::setprecision(2) << fluid.Config.FORCE_SURFACE;
             awa->setString(oss.str());
 
             lbutton->shape = buttonShape;
@@ -657,7 +653,6 @@ int main() {
         tickCount++;
     }
 
-    b2DynamicTree_Destroy(&fluid.dynamicTree);
     b2DestroyWorld(world.worldId);
     return 0;
 }
