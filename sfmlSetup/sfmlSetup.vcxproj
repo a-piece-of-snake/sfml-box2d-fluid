@@ -144,6 +144,7 @@
   <ItemGroup>
     <ClInclude Include="GameObjects.h" />
     <ClInclude Include="MathUtils.h" />
+    <ClInclude Include="Player.h" />
     <ClInclude Include="renderBox2d.h" />
     <ClInclude Include="ThreadPool.h" />
   </ItemGroup>

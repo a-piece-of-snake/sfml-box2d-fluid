@@ -21,6 +21,7 @@ namespace renderB2
 	}
 	sf::Font DefaultFont("Assets\\Fonts\\CangJiGaoDeGuoMiaoHei_CJgaodeguomh_2.ttf");
 	sf::Texture Smoke("Assets\\Textures\\smoke.png");
+	sf::Texture Soul("Assets\\Textures\\Soul.png");
 
 	sf::Font getDefaultFont() {
 		DefaultFont.setSmooth(false);
@@ -195,6 +196,18 @@ namespace renderB2
 		window->draw(shape);
 		return;
 	}
+
+	void renderSoul(sf::RenderWindow* window, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
+		sf::Sprite sprite(Soul);
+		sprite.setOrigin({circle.radius, circle.radius});
+		b2Transform transform = b2Body_GetTransform(bodyId);
+		b2Vec2 pos = transform.p;
+		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
+
+		sprite.setPosition(MathUtils::getSFpos(pos.x, pos.y));
+		window->draw(sprite);
+		return;
+	}
 	/*
 	//smoke
 	void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
@@ -210,18 +223,55 @@ namespace renderB2
 		return;
 	}
 	*/
-	void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
-		sf::CircleShape shape(0.f, 3);
-		shape.setRotation(sf::degrees(90));
-		setRenderSettings(&shape, rendersettings);
-		for (auto& p : group.Particles) {
-			shape.setRadius(p.shape.radius);
-			shape.setOrigin({ p.shape.radius, p.shape.radius });
-			shape.setPosition(MathUtils::getSFpos(p.pos.x, p.pos.y));
-			window->draw(shape);
+	void rendersimpleparticle(sf::RenderWindow* window,
+		renderB2::RenderSettings rendersettings,
+		GameObjects::ParticleGroup& group,
+		renderB2::ScreenSettings screensettings)
+	{
+		sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size());
+		int i = 0;
+		for (const auto& p : group.Particles)
+		{
+			const sf::Vector2f center = MathUtils::getSFpos(p.pos.x, p.pos.y);
+			point[i].color = rendersettings.FillColor;
+			point[i].position = center;
+			i++;
 		}
-		return;
+		window->draw(point);
 	}
+	/*
+	sf::Image image({ 2400, 1350 }, sf::Color::Transparent);
+	sf::Image image2({ 2400, 1350 }, sf::Color::Transparent);
+	void rendersimpleparticle(sf::RenderWindow* window,
+		renderB2::RenderSettings rendersettings,
+		GameObjects::ParticleGroup& group,
+		renderB2::ScreenSettings screensettings)
+	{
+		image = image2;
+		const sf::Color fillColor = sf::Color::White;;
+		for (const auto& p : group.Particles)
+		{
+			const sf::Vector2f center = MathUtils::getSFpos(p.pos.x, p.pos.y);
+			const sf::Vector2u center2 = { (unsigned int)center.x - screensettings.camX, (unsigned int)center.y - screensettings.camY };
+			if ((center2.x < window->getSize().x && center2.y < window->getSize().y) ) {
+				image.setPixel(center2, sf::Color::White);
+			}
+		}
+		sf::Texture texture(image);
+		sf::RectangleShape shape({ (float)window->getSize().x, (float)window->getSize().y });
+		shape.setTexture(&texture);
+		shape.move({ (float)screensettings.camX , (float)screensettings.camY});
+		/*
+		sf::Shader shader;
+		if (!shader.loadFromFile("Assets\\Shaders\\metaball.frag", sf::Shader::Type::Fragment)) {
+		}
+		shader.setUniform("iResolution", sf::Vector2f(window->getSize()));
+		shader.setUniform("tex", texture);
+		shader.setUniform("texSize", sf::Vector2f{ 2400, 1350 });
+		window->draw(shape, &shader);
+		*/
+	//	window->draw(shape);
+	//}
 	/*
 	  // water
 	void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup group, renderB2::ScreenSettings screensettings) {
@@ -263,60 +313,4 @@ namespace renderB2
 		}
 		return;
 	}*/
-	/*
-	void renderB2::rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
-		const float neighborFactor = 2.0f;
-		const float attractAlpha = 0.f;
-
-		sf::CircleShape shape;
-		// 预先设置基本渲染属性
-		setRenderSettings(&shape, rendersettings);
-		shape.setRotation(sf::degrees(90));
-
-		// 遍历每个粒子
-		for (auto& p : group.Particles) {
-			// 获取粒子原始屏幕位置
-			sf::Vector2f basePos = MathUtils::getSFpos(p.pos.x, p.pos.y);
-			sf::Vector2f attractPos = basePos;
-			int neighborCount = 0;
-			sf::Vector2f neighborSum(0.f, 0.f);
-			float influenceRadius = p.shape.radius * group.Config.Impact * neighborFactor;
-			for (auto& other : group.Particles) {
-				if (&other == &p)
-					continue;
-				sf::Vector2f otherPos = MathUtils::getSFpos(other.pos.x, other.pos.y);
-				float dx = otherPos.x - basePos.x;
-				float dy = otherPos.y - basePos.y;
-				float dist = std::sqrt(dx * dx + dy * dy);
-				if (dist < influenceRadius) {
-					neighborSum += otherPos;
-					neighborCount++;
-				}
-			}
-			if (neighborCount > 0) {
-				sf::Vector2f avgPos = neighborSum / static_cast<float>(neighborCount);
-				attractPos = basePos + (attractAlpha * (avgPos - basePos));
-			}
-			sf::Color fillColor = rendersettings.FillColor;
-			if (neighborCount >= 3) {
-				fillColor = sf::Color(255, 100, 100, 200);
-			}
-			else if (neighborCount > 0) {
-				fillColor = sf::Color(100, 200, 255, 200);
-			}
-			shape.setFillColor(fillColor);
-
-			float drawRadius = p.shape.radius * 1.25f;
-			shape.setRadius(drawRadius);
-			shape.setOrigin({ drawRadius, drawRadius });
-			shape.setPosition(attractPos);
-			window->draw(shape);
-			if (neighborCount > 0) {
-				sf::Vertex line[] = {
-					sf::Vertex(basePos, sf::Color::White),
-					sf::Vertex(attractPos, sf::Color::White)
-				};
-				window->draw(line, 2, sf::PrimitiveType::LineStrip);
-			}
-		}*/
 }

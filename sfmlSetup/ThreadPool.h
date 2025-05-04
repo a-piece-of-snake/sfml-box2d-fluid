@@ -33,13 +33,10 @@ public:
                         if (this->stop && this->tasks.empty())
                             return;
 
-                        // 从队列中取出任务
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
 
-                    } // 互斥锁在此处释放
-
-                    // 执行任务
+                    } 
                     task();
                 }
                 });

@@ -40,31 +40,45 @@ namespace GameObjects
         Particles.shrink_to_fit();
     }
 
-    void ParticleGroup::UpdateData(GameObjects::World world) {
-        for (auto& bucket : gridBuckets) {
-            bucket.clear();
-            bucket.reserve(8);
-        }
 
-
-        for (auto& p : Particles) {
-            int gridX = static_cast<int>((p.pos.x + 5000.0f) / cellSize); 
-            int gridY = static_cast<int>((p.pos.y + 5000.0f) / cellSize);
-            gridX = std::clamp(gridX, 0, gridSizeX - 1);
-            gridY = std::clamp(gridY, 0, gridSizeY - 1);
-            gridBuckets[gridY * gridSizeX + gridX].push_back(&p);
-
-            p.nextTickLinearImpulse = b2Vec2_zero;
-            p.nextTickForce = b2Vec2_zero;
-            p.pos = b2Body_GetPosition(p.bodyId);
-            p.LinearVelocity = b2Body_GetLinearVelocity(p.bodyId);
-
-            if (p.age >= p.life && p.life >= 0)
-                DestroyParticle(world, &p);
-            p.age++;
-        }
+void ParticleGroup::UpdateData(World world) {
+    // 1. 清空所有网格桶
+    for (auto& bucket : gridBuckets) {
+        bucket.clear();
     }
 
+    // 2. 延迟销毁列表
+    std::vector<int> toDelete;
+    toDelete.reserve(Particles.size());
+
+    // 3. 遍历所有粒子，更新状态或标记销毁
+    for (int i = 0, n = int(Particles.size()); i < n; ++i) {
+        Particle& p = Particles[i];
+
+        // 增加年龄，检查是否超寿命
+        if (p.life >= 0 && ++p.age > p.life) {
+            toDelete.push_back(i);
+            continue;
+        }
+
+        // 重置上一帧的冲量
+        p.nextTickLinearImpulse = b2Vec2_zero;
+
+        // 更新位置、速度
+        p.pos = b2Body_GetPosition(p.bodyId);
+        p.LinearVelocity = b2Body_GetLinearVelocity(p.bodyId);
+
+        int gx = std::clamp(int((p.pos.x + cellSize * gridSizeX * 0.5f) / cellSize), 0, gridSizeX - 1);
+        int gy = std::clamp(int((p.pos.y + cellSize * gridSizeY * 0.5f) / cellSize), 0, gridSizeY - 1);
+        gridBuckets[gy * gridSizeX + gx].push_back(&p);
+    }
+
+    for (int j = int(toDelete.size()) - 1; j >= 0; --j) {
+        int idx = toDelete[j];
+        b2DestroyBody(Particles[idx].bodyId);
+        Particles.erase(Particles.begin() + idx);
+    }
+}
 
     void ParticleGroup::CreateParticle(GameObjects::World world,  float gravityScale, float radius, float x, float y, float density, float friction, float restitution) {
         Config.radius = radius;
@@ -84,14 +98,14 @@ namespace GameObjects
         shapeDef.density = density;
         shapeDef.friction = friction;
         shapeDef.restitution = restitution;
-        /*
+        ///*
         {
             b2Filter filter;
             filter.categoryBits = 0x0002;
             filter.maskBits = 0xFFFF & ~(0x0002);
             shapeDef.filter = filter;
         }
-        */
+        //*/
         b2Circle circle;
         circle.radius = radius;
         circle.center = b2Vec2{ 0.0f, 0.0f };
@@ -132,8 +146,9 @@ namespace GameObjects
                 return 0;
             float volume = (B2_PI * std::pow(radius, 4)) / 4;
             float x = radius - dst;
-            return std::pow(radius - dst, 2.75f) / volume;
+            return std::pow(radius - dst, 3.f) / volume;
         }
+
         */
 
 
@@ -172,7 +187,7 @@ namespace GameObjects
         void ParticleGroup::ComputeChunkForces(int start, int end) {
             for (int idx = start; idx < end; ++idx) {
                 Particle& p = Particles[idx];
-                if(b2Body_IsAwake(p.bodyId)) {
+                if (b2Body_IsAwake(p.bodyId)) {
                     float range = p.shape.radius * Config.Impact;
 
                     std::vector<Particle*> neighbors;
@@ -215,25 +230,21 @@ namespace GameObjects
                         float dst = MathUtils::b2Vec2Length(offset) / (p.shape.radius / Config.Impact);
                         float effectiveRange = (radiusA + radiusB) * Config.Impact;
                         if (dst < effectiveRange) {
-                            dst = dst - radiusA;
                             b2Vec2 forceDir = MathUtils::b2Vec2Normalized(offset);
-                            float distanceForceMag = GetForce(dst / std::max(density, 1e-3f), effectiveRange);
+                            float distanceForceMag = GetForce(dst, effectiveRange) * std::min(std::max(density, 0.f), 2.f);
                             b2Vec2 repulsionForce = (-Config.FORCE_MULTIPLIER) * forceDir * distanceForceMag * effectiveRange;
 
                             b2Vec2 velA = p.LinearVelocity;
                             b2Vec2 velB = other->LinearVelocity;
-                            b2Vec2 momentumForce = (velA - velB)
-                                * ((effectiveRange - dst) / effectiveRange)
-                                * Config.MomentumCoefficient;
+                            b2Vec2 momentumForce = (velA - velB) * ((effectiveRange - dst) / effectiveRange) * Config.MomentumCoefficient;
 
-                            float d0 = p.shape.radius * Config.Impact;
-                            b2Vec2 springForce = b2Vec2_zero;
                             neighborSum += posB;
                             attractCount++;
+                            
+                            b2Vec2 totalForce = repulsionForce + momentumForce;
 
-                            b2Vec2 totalForce = repulsionForce + momentumForce + springForce;
+
                             totalForce *= (p.shape.radius / 2.0f);
-
                             {
                                 std::lock_guard<std::mutex> lk(mutex);
                                 other->nextTickLinearImpulse += totalForce;
@@ -246,6 +257,33 @@ namespace GameObjects
                         b2Vec2 avgPos = { neighborSum.x / float(attractCount), neighborSum.y / float(attractCount) };
                         p.nextTickLinearImpulse += Config.FORCE_SURFACE * (avgPos - p.pos);
                     }
+                   std::vector<b2ContactData> contactData;
+                   int capacity = b2Shape_GetContactCapacity(p.shapeId);
+                   contactData.resize(capacity);
+                   int count = b2Body_GetContactData(p.bodyId, contactData.data(), capacity);
+                   for (int i = 0; i < count; ++i) {
+                       b2Manifold manifold = contactData[i].manifold;
+
+                       b2BodyId bodyIdA = b2Shape_GetBody(contactData[i].shapeIdA);
+                       b2BodyId bodyIdB = b2Shape_GetBody(contactData[i].shapeIdB);
+                       std::string nameA = b2Body_GetName(bodyIdA);
+                       std::string nameB = b2Body_GetName(bodyIdB);
+                       if (!(nameA == "Particle" && nameB == "Particle") && (nameA == "Particle" || nameB == "Particle")) {
+                           for (int k = 0; k < manifold.pointCount; ++k) {
+                               b2ManifoldPoint point = manifold.points[k];
+                               b2Vec2 pos = point.point;
+							   b2Vec2 offset = pos - p.pos;
+                               b2Vec2 force = MathUtils::b2Vec2Normalized(offset);
+                               p.nextTickLinearImpulse += force * Config.FORCE_ADHESION;
+                               if (nameA == "Particle") {
+                                   b2Body_ApplyLinearImpulse(bodyIdB, -force * Config.FORCE_ADHESION, pos,true);
+                               }
+                               else {
+                                   b2Body_ApplyLinearImpulse(bodyIdA, -force * Config.FORCE_ADHESION,  pos, true);
+                               }
+                           }
+                       }
+                   }
                 }
                 else {
                     p.nextTickLinearImpulse = b2Vec2_zero;

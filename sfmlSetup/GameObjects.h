@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <iostream>
 #include <vector>
 #include <cfloat>
@@ -39,21 +39,20 @@ namespace GameObjects
         int neighborCount = 0;
         int FreezeTime = 0;
         std::vector<b2JointId> AdhesionJoint;
-        std::unordered_map<Particle*, float> restDistance;
     };
 
 
     struct ParticleConfig {
         float radius = 3.0f;
         float friction = 0.0f;
-        float restitution = 0.25f;
-        float Impact = 6.f;
-        float FORCE_MULTIPLIER = -500.0f;
-        float FORCE_SURFACE = 50.f;
-        float FORCE_ADHESION = 100.f;
-        float MomentumCoefficient = 1.f;
+        float restitution = 0.01f;
+        float Impact = 4.f;//5.f
+        float MomentumCoefficient = 0.5f;
+        float FORCE_MULTIPLIER = -500.f;
+        float FORCE_SURFACE = 25.f;
+        float FORCE_ADHESION = 5000.f;
     };
-
+    
 
     struct ParticleGroup {
         void init();
