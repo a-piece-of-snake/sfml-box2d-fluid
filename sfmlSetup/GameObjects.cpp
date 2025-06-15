@@ -42,29 +42,23 @@ namespace GameObjects
 
 
 void ParticleGroup::UpdateData(World world) {
-    // 1. 清空所有网格桶
     for (auto& bucket : gridBuckets) {
         bucket.clear();
     }
 
-    // 2. 延迟销毁列表
     std::vector<int> toDelete;
     toDelete.reserve(Particles.size());
 
-    // 3. 遍历所有粒子，更新状态或标记销毁
     for (int i = 0, n = int(Particles.size()); i < n; ++i) {
         Particle& p = Particles[i];
 
-        // 增加年龄，检查是否超寿命
         if (p.life >= 0 && ++p.age > p.life) {
             toDelete.push_back(i);
             continue;
         }
 
-        // 重置上一帧的冲量
         p.nextTickLinearImpulse = b2Vec2_zero;
 
-        // 更新位置、速度
         p.pos = b2Body_GetPosition(p.bodyId);
         p.LinearVelocity = b2Body_GetLinearVelocity(p.bodyId);
 
@@ -80,7 +74,7 @@ void ParticleGroup::UpdateData(World world) {
     }
 }
 
-    void ParticleGroup::CreateParticle(GameObjects::World world,  float gravityScale, float radius, float x, float y, float density, float friction, float restitution) {
+    void ParticleGroup::CreateParticle(GameObjects::World world,  float gravityScale, float radius, float x, float y, float density, float friction, float restitution,sf::Color color) {
         Config.radius = radius;
         b2BodyDef bodyDef = b2DefaultBodyDef();
         bodyDef.position = { x, y };
@@ -122,6 +116,9 @@ void ParticleGroup::UpdateData(World world) {
         p.shape = circle;
         p.shapeId = shapeId;
         p.mass = b2Body_GetMass(p.bodyId);
+       // if ((int)world.clock.getElapsedTime().asSeconds() % 2 >= 1) {
+            p.color = color;
+        //}
         int index = Particles.size();
         Particles.push_back(p);
     }
@@ -137,9 +134,12 @@ void ParticleGroup::UpdateData(World world) {
             if (dst >= radius) return 0;
             float x = radius - dst;
             float x_sq = x * x;
-            float x_pow2_75 = x_sq * std::sqrt(x) * std::sqrt(std::sqrt(x));
-            return x_pow2_75 / (B2_PI * radius * radius * radius * radius / 4.0f);
+            float x_pow2_75 = x_sq * MathUtils::Q_sqrt(x) * MathUtils::Q_sqrt(MathUtils::Q_sqrt(x));
+			float radius_sq = radius * radius;
+            return x_pow2_75 / (B2_PI * radius_sq * radius_sq / 4.0f);
         }
+
+
         /*
         float ParticleGroup::GetForce(float dst, float radius) {
             if (dst >= radius)
@@ -185,13 +185,14 @@ void ParticleGroup::UpdateData(World world) {
             }
         }
         void ParticleGroup::ComputeChunkForces(int start, int end) {
+
+            thread_local std::vector<Particle*> neighbors;
             for (int idx = start; idx < end; ++idx) {
                 Particle& p = Particles[idx];
                 if (b2Body_IsAwake(p.bodyId)) {
                     float range = p.shape.radius * Config.Impact;
 
-                    std::vector<Particle*> neighbors;
-                    neighbors.reserve(64);
+                    neighbors.clear();
                     float density = 0.0f;
 
                     int centerX = static_cast<int>((p.pos.x + 5000.0f) / cellSize);
@@ -209,7 +210,7 @@ void ParticleGroup::UpdateData(World world) {
                             for (Particle* other : bucket) {
                                 if (other == &p) continue;
 
-                                float dist = MathUtils::b2Vec2Length(other->pos - p.pos);
+                                float dist = b2Length(other->pos - p.pos);
                                 if (dist < range) {
                                     float influence = GetForce(dist, range);
                                     density += p.mass * influence;
@@ -221,34 +222,85 @@ void ParticleGroup::UpdateData(World world) {
 
                     b2Vec2 neighborSum = b2Vec2_zero;
                     int attractCount = 0;
+
+
+                    b2Vec2 posA = p.pos;
+                    b2Vec2 posB = b2Vec2_zero;
+                    b2Vec2 offset = b2Vec2_zero;
+                    b2Vec2 velA = p.LinearVelocity;
+                    float radiusA = p.shape.radius / (p.shape.radius / Config.Impact);
+                    float radiusB = 0.f;
+                    float dst = 0.f;
+
                     for (Particle* other : neighbors) {
-                        b2Vec2 posA = p.pos;
-                        b2Vec2 posB = other->pos;
-                        float radiusA = p.shape.radius / (p.shape.radius / Config.Impact);
-                        float radiusB = other->shape.radius / (p.shape.radius / Config.Impact);
-                        b2Vec2 offset = posB - posA;
-                        float dst = MathUtils::b2Vec2Length(offset) / (p.shape.radius / Config.Impact);
+
+                        //sf::Clock clock;
+
+                        posB = other->pos;
+                        radiusB = other->shape.radius / (p.shape.radius / Config.Impact);
+                        offset = posB - posA;
+                        dst = b2Length(offset) / (p.shape.radius / Config.Impact);
                         float effectiveRange = (radiusA + radiusB) * Config.Impact;
                         if (dst < effectiveRange) {
-                            b2Vec2 forceDir = MathUtils::b2Vec2Normalized(offset);
-                            float distanceForceMag = GetForce(dst, effectiveRange) * std::min(std::max(density, 0.f), 2.f);
-                            b2Vec2 repulsionForce = (-Config.FORCE_MULTIPLIER) * forceDir * distanceForceMag * effectiveRange;
+                            b2Vec2 forceDir = b2Normalize(offset);
 
-                            b2Vec2 velA = p.LinearVelocity;
+                            float densityScale = std::clamp(density, 0.0f, 2.5f);
+                            float distanceForceMag = GetForce(dst, effectiveRange) * densityScale * MathUtils::Q_sqrt(densityScale);
+
+                            b2Vec2 repulsionForce = (Config.FORCE_MULTIPLIER) * forceDir * distanceForceMag * effectiveRange;
+
                             b2Vec2 velB = other->LinearVelocity;
                             b2Vec2 momentumForce = (velA - velB) * ((effectiveRange - dst) / effectiveRange) * Config.MomentumCoefficient;
 
                             neighborSum += posB;
                             attractCount++;
                             
+
                             b2Vec2 totalForce = repulsionForce + momentumForce;
 
+                            float rNorm = dst / effectiveRange;
+                            rNorm = std::clamp(rNorm, 0.1f, 1.0f); 
 
-                            totalForce *= (p.shape.radius / 2.0f);
+                            static auto ViscosityKernelSimple = [](float r)->float {
+                                return (-0.5f * r * r * r + r * r - 1.0f);
+                                };
+                            float kVisc = ViscosityKernelSimple(rNorm);
+
+                            b2Vec2 velDiff = other->LinearVelocity - p.LinearVelocity;
+                            float maxVelDiff = 10.0f;
+                            float len = b2Length(velDiff);
+                            if (len > maxVelDiff) {
+                                velDiff = velDiff * (maxVelDiff / len); 
+                            }
+
+                            float dot = b2Dot(velDiff, offset);
+                            float leaveMul = (dot > 0 ? Config.VISCOSITY_LEAVE : 1.0f);
+
+                            b2Vec2 viscForce = Config.VISCOSITY * leaveMul * kVisc * velDiff;
+
+
+                            b2Vec2 dir = b2Normalize(offset);
+                            b2Vec2 tangent = { -dir.y, dir.x }; 
+
+                            float tangentialSpeed = b2Dot(other->LinearVelocity - p.LinearVelocity, tangent);
+                            b2Vec2 frictionForce = -Config.SHEAR_VISCOSITY * tangentialSpeed * tangent;
+
+                            float attenuation = 1.0f - (rNorm);
+                            frictionForce *= attenuation;
+
+                            totalForce += frictionForce;
+
+
+                            totalForce += viscForce;
+
+                            //totalForce *= (p.shape.radius / 2.0f);
                             {
                                 std::lock_guard<std::mutex> lk(mutex);
                                 other->nextTickLinearImpulse += totalForce;
                                 p.nextTickLinearImpulse -= totalForce;
+
+                                //sf::Time elapsed = clock.getElapsedTime();
+                                //costtime += elapsed.asMilliseconds();
                             }
                         }
                     }
@@ -257,33 +309,39 @@ void ParticleGroup::UpdateData(World world) {
                         b2Vec2 avgPos = { neighborSum.x / float(attractCount), neighborSum.y / float(attractCount) };
                         p.nextTickLinearImpulse += Config.FORCE_SURFACE * (avgPos - p.pos);
                     }
-                   std::vector<b2ContactData> contactData;
-                   int capacity = b2Shape_GetContactCapacity(p.shapeId);
-                   contactData.resize(capacity);
-                   int count = b2Body_GetContactData(p.bodyId, contactData.data(), capacity);
-                   for (int i = 0; i < count; ++i) {
-                       b2Manifold manifold = contactData[i].manifold;
+                    if (b2Length(p.LinearVelocity) > 10 && p.neighborCount <= 5 && b2Length( p.nextTickLinearImpulse) > 80 )
+                        p.color = sf::Color::White;
+                    else {
+                        p.color = sf::Color::Cyan;
+                    }
+                    /*
+                    std::vector<b2ContactData> contactData;
+                    int capacity = b2Shape_GetContactCapacity(p.shapeId);
+                    contactData.resize(capacity);
+                    int count = b2Body_GetContactData(p.bodyId, contactData.data(), capacity);
+                    for (int i = 0; i < count; ++i) {
+                        b2Manifold manifold = contactData[i].manifold;
 
-                       b2BodyId bodyIdA = b2Shape_GetBody(contactData[i].shapeIdA);
-                       b2BodyId bodyIdB = b2Shape_GetBody(contactData[i].shapeIdB);
-                       std::string nameA = b2Body_GetName(bodyIdA);
-                       std::string nameB = b2Body_GetName(bodyIdB);
-                       if (!(nameA == "Particle" && nameB == "Particle") && (nameA == "Particle" || nameB == "Particle")) {
-                           for (int k = 0; k < manifold.pointCount; ++k) {
-                               b2ManifoldPoint point = manifold.points[k];
-                               b2Vec2 pos = point.point;
-							   b2Vec2 offset = pos - p.pos;
-                               b2Vec2 force = MathUtils::b2Vec2Normalized(offset);
-                               p.nextTickLinearImpulse += force * Config.FORCE_ADHESION;
-                               if (nameA == "Particle") {
-                                   b2Body_ApplyLinearImpulse(bodyIdB, -force * Config.FORCE_ADHESION, pos,true);
-                               }
-                               else {
-                                   b2Body_ApplyLinearImpulse(bodyIdA, -force * Config.FORCE_ADHESION,  pos, true);
-                               }
-                           }
-                       }
-                   }
+                        b2BodyId bodyIdA = b2Shape_GetBody(contactData[i].shapeIdA);
+                        b2BodyId bodyIdB = b2Shape_GetBody(contactData[i].shapeIdB);
+                        std::string nameA = b2Body_GetName(bodyIdA);
+                        std::string nameB = b2Body_GetName(bodyIdB);
+
+                        if ((nameA == "Particle" && nameB != "Particle") || (nameB == "Particle" && nameA != "Particle")) {
+                            for (int k = 0; k < manifold.pointCount; ++k) {
+                                b2Vec2 contactPoint = manifold.points[k].point;
+                                b2BodyId otherBody = nameA == "Particle" ? bodyIdB : bodyIdA;
+                                b2Vec2 normal = b2Normalize(contactPoint - p.pos);
+                                b2Vec2 relativeVel = b2Body_GetLinearVelocity(otherBody) - p.LinearVelocity;
+
+                                if (b2Dot(relativeVel, normal) > 0) {
+                                    p.nextTickLinearImpulse += normal * Config.FORCE_ADHESION;
+                                }
+
+                            }
+                        }
+                    }*/
+
                 }
                 else {
                     p.nextTickLinearImpulse = b2Vec2_zero;
@@ -291,12 +349,15 @@ void ParticleGroup::UpdateData(World world) {
             }
         }
         void ParticleGroup::ComputeParticleForces() {
+            //costtime = 0.f;
             const int n = Particles.size();
             if (n == 0) return;
 
-            static ThreadPool pool(std::thread::hardware_concurrency());
-
-            const int chunkSize = 250;
+            int chunkSize = 256;
+            if (n <= 500)
+                chunkSize = 512;
+            int t = std::min(std::thread::hardware_concurrency(), (unsigned int)std::ceil(n / chunkSize));
+            static ThreadPool pool(t);
             std::vector<std::future<void>> futures;
 
             for (int start = 0; start < n; start += chunkSize) {
@@ -311,5 +372,6 @@ void ParticleGroup::UpdateData(World world) {
             for (auto& f : futures) {
                 f.wait();
             }
+            //std::printf("ComputeParticleForces 耗时: %.f ms\n", costtime);
         }
 }

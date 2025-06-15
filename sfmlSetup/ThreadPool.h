@@ -1,102 +1,105 @@
 #pragma once
 #include <vector>
-#include <functional>
-#include <queue>
+#include <deque>
+#include <thread>
 #include <mutex>
 #include <future>
 #include <condition_variable>
-#include <thread> // 明确包含 <thread> 头文件
+#include <functional>
+#include <random>
+#include <atomic>
 
 class ThreadPool {
 public:
-    explicit ThreadPool(size_t numThreads) : stop(false) {
-        if (numThreads == 0) {
-            // 可以选择抛出异常或设置一个默认值
-            // throw std::runtime_error("Number of threads cannot be zero.");
-            numThreads = 1; // 或者给一个合理的默认值
-        }
+    explicit ThreadPool(size_t numThreads) : stop(false), indexDist(0, numThreads ? numThreads - 1 : 0) {
+        if (numThreads == 0) numThreads = 1;
 
+        queues.resize(numThreads);
         for (size_t i = 0; i < numThreads; ++i) {
-            workers.emplace_back([this] {
-                for (;;) {
-                    std::function<void()> task; // 存储待执行的任务
-
-                    {
-                        // 获取互斥锁并等待条件变量
-                        std::unique_lock<std::mutex> lock(this->queue_mutex);
-
-                        // 等待条件：停止标志为true 或 任务队列不为空
-                        this->condition.wait(lock,
-                            [this] { return this->stop || !this->tasks.empty(); });
-
-                        // 如果停止标志为true 且 任务队列为空，则线程退出循环
-                        if (this->stop && this->tasks.empty())
-                            return;
-
-                        task = std::move(this->tasks.front());
-                        this->tasks.pop();
-
-                    } 
-                    task();
-                }
-                });
+            workers.emplace_back([this, i] { this->workerLoop(i); });
         }
     }
 
-    // 析构函数：安全地停止所有工作线程
     ~ThreadPool() {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            stop = true; // 设置停止标志
-        }
-        condition.notify_all(); // 唤醒所有等待的线程
-
-        // 等待所有线程完成它们的当前任务并退出
-        for (std::thread& worker : workers) {
-            if (worker.joinable()) { // 检查线程是否可汇合
-                worker.join();
-            }
-        }
+        stop = true;
+        condition.notify_all();
+        for (auto& t : workers)
+            if (t.joinable()) t.join();
     }
 
-    // 禁止拷贝和赋值
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
         using return_type = decltype(f(args...));
-
-        // 创建一个 packaged_task 来包装用户函数并获取 future
-        auto task = std::make_shared< std::packaged_task<return_type()> >(
+        auto task = std::make_shared<std::packaged_task<return_type()>>(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
-
-        std::future<return_type> res = task->get_future();
-
+        auto wrapper = [task]() { (*task)(); };
         {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-
-            // 检查线程池是否已停止运行
-            if (stop) {
-                throw std::runtime_error("enqueue on stopped ThreadPool");
-            }
-
-            // 将包装好的任务（lambda）添加到任务队列
-            // tasks.emplace([task](){ (*task)(); }); // 你的原始写法也是OK的
-            tasks.push([task]() { (*task)(); }); // 或者使用push
-
-        } // 互斥锁在此处释放
-
-        condition.notify_one(); // 唤醒一个等待的工作线程
-        return res;
+            std::unique_lock<std::mutex> lock(queueMutex);
+            size_t i = indexDist(rng);
+            queues[i].emplace_back(std::move(wrapper));
+        }
+        condition.notify_one();
+        return task->get_future();
     }
 
 private:
-    std::vector<std::thread> workers;          // 工作线程集合
-    std::queue<std::function<void()>> tasks;   // 任务队列
+    std::vector<std::thread> workers;
+    std::vector<std::deque<std::function<void()>>> queues;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    std::atomic<bool> stop;
 
-    std::mutex queue_mutex;                     // 任务队列的互斥锁
-    std::condition_variable condition;          // 条件变量，用于线程同步
-    bool stop;                                  // 停止标志
+    std::mt19937 rng{ std::random_device{}() };
+    std::uniform_int_distribution<size_t> indexDist;
+
+    void workerLoop(size_t index) {
+        while (!stop) {
+            std::function<void()> task;
+
+            {
+                std::unique_lock<std::mutex> lock(queueMutex);
+                condition.wait(lock, [this, index] {
+                    return stop || !queues[index].empty() || hasTaskToSteal(index);
+                    });
+
+                if (stop) break;
+
+                if (!queues[index].empty()) {
+                    task = std::move(queues[index].front());
+                    queues[index].pop_front();
+                }
+                else {
+                    size_t victim = findVictim(index);
+                    if (victim != index && !queues[victim].empty()) {
+                        task = std::move(queues[victim].back());
+                        queues[victim].pop_back();
+                    }
+                }
+            }
+
+            if (task) {
+                task();
+            }
+        }
+    }
+
+    bool hasTaskToSteal(size_t selfIndex) {
+        for (size_t i = 0; i < queues.size(); ++i) {
+            if (i == selfIndex) continue;
+            if (!queues[i].empty()) return true;
+        }
+        return false;
+    }
+
+    size_t findVictim(size_t selfIndex) {
+        for (size_t offset = 1; offset < queues.size(); ++offset) {
+            size_t i = (selfIndex + offset) % queues.size();
+            if (!queues[i].empty()) return i;
+        }
+        return selfIndex;
+    }
 };

@@ -21,7 +21,9 @@ namespace GameObjects
     struct World
     {
         b2WorldId worldId;
-
+        sf::Clock clock;
+        b2JointId mouseJointId = b2_nullJointId;
+        b2BodyId groundBodyId;
     };
 
     struct Particle {
@@ -33,6 +35,7 @@ namespace GameObjects
         b2Vec2 nextTickForce = b2Vec2_zero;
         b2Vec2 nextTickLinearImpulse = b2Vec2_zero;
 
+        sf::Color color = sf::Color::Cyan;
         b2BodyId bodyId;
         b2ShapeId shapeId;
         b2Circle shape;
@@ -43,14 +46,17 @@ namespace GameObjects
 
 
     struct ParticleConfig {
-        float radius = 3.0f;
+        float radius = 4.f;
         float friction = 0.0f;
         float restitution = 0.01f;
-        float Impact = 4.f;//5.f
-        float MomentumCoefficient = 0.5f;
-        float FORCE_MULTIPLIER = -500.f;
+        float Impact = 5.f;
+        float MomentumCoefficient = 1.f;
+        float SHEAR_VISCOSITY = 0.75f;
+        float FORCE_MULTIPLIER = 900.f;
         float FORCE_SURFACE = 25.f;
-        float FORCE_ADHESION = 5000.f;
+        float FORCE_ADHESION = 0.f;
+        float VISCOSITY = 0.75f; 
+        float VISCOSITY_LEAVE = 0.05f;  
     };
     
 
@@ -82,7 +88,7 @@ namespace GameObjects
         int getHash2D(std::pair<int, int> gridPos);
         std::pair<int, int> getGridPos(GameObjects::Particle& pariticle);
         void UpdateData(GameObjects::World world);
-        void CreateParticle(GameObjects::World world, float gravityScale, float radius, float x, float y, float density, float friction, float restitution);
+        void CreateParticle(GameObjects::World world, float gravityScale, float radius, float x, float y, float density, float friction, float restitution,sf::Color color);
         void DestroyParticle(GameObjects::World world, GameObjects::Particle* particle);
         float GetForce(float dst, float radius);
         void freeze();

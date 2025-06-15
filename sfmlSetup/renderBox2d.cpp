@@ -17,6 +17,8 @@ namespace renderB2
 		sf::Color WarningOutline = sf::Color{ 136, 0, 27 };
 		sf::Color WarningText = sf::Color{ 222, 33, 40 };
 		sf::Color TextBox = sf::Color{ 2, 66, 110, 133 };
+		sf::Color Button = sf::Color{ 30, 55, 58, 133 };
+		sf::Color LightBlue = sf::Color{ 6, 156, 195, 133 };
 		sf::Color B2BodyFill = sf::Color{ 255, 255, 255, 85 };
 	}
 	sf::Font DefaultFont("Assets\\Fonts\\CangJiGaoDeGuoMiaoHei_CJgaodeguomh_2.ttf");
@@ -66,7 +68,7 @@ namespace renderB2
 		convex.setPoint(7, { Subtract, 0.f });
 		return convex;
 	}
-	void setRenderSettings(sf::Shape* shape, renderB2::RenderSettings rendersettings){
+	void setRenderSettings(sf::Shape* shape, renderB2::RenderSettings rendersettings) {
 		shape->setFillColor(rendersettings.FillColor);
 		shape->setOutlineThickness(rendersettings.OutlineThickness);
 		shape->setOutlineColor(rendersettings.OutlineColor);
@@ -171,7 +173,7 @@ namespace renderB2
 		sf::Vector2f center = (minPoint + maxPoint) / 2.f;
 		shape.setOrigin(center);
 		*/
-		shape.setOrigin({ shape.getLocalBounds().getCenter().x, shape.getLocalBounds().getCenter().y});
+		shape.setOrigin({ shape.getLocalBounds().getCenter().x, shape.getLocalBounds().getCenter().y });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * 180.0f / B2_PI;
@@ -199,7 +201,7 @@ namespace renderB2
 
 	void renderSoul(sf::RenderWindow* window, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
 		sf::Sprite sprite(Soul);
-		sprite.setOrigin({circle.radius, circle.radius});
+		sprite.setOrigin({ circle.radius, circle.radius });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
 		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
@@ -228,16 +230,53 @@ namespace renderB2
 		GameObjects::ParticleGroup& group,
 		renderB2::ScreenSettings screensettings)
 	{
-		sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size());
-		int i = 0;
+		//sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size() * 9);
+		sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size() * 5);
+		int count = 0;
+		const sf::Vector2f offset[5] = { { 0, 0 },   { 1, 0 },   { -1, 0 },   { 0, 1 },   { 0, -1 } };
 		for (const auto& p : group.Particles)
 		{
 			const sf::Vector2f center = MathUtils::getSFpos(p.pos.x, p.pos.y);
-			point[i].color = rendersettings.FillColor;
-			point[i].position = center;
-			i++;
+			/*
+			for (int i = -1; i <= 1; ++i) {
+				for (int j = -1; j <= 1; ++j) {
+					point[count].color = rendersettings.FillColor;
+					point[count].position = { center.x + i, center.y + j };
+					count++;
+				}
+			}
+			*/
+			for (int i = 0; i < 5; ++i) {
+				if (b2Body_IsAwake(p.bodyId))
+					point[count].color = p.color;
+				else
+					point[count].color = sf::Color::Yellow;
+				point[count].position = center + offset[i];
+				count++;
+			}
 		}
 		window->draw(point);
+	}
+	void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
+		//sf::CircleShape shape(1,8);
+
+		for (auto& p : group.Particles) {
+			sf::Vector2f basePos = MathUtils::getSFpos(p.pos.x, p.pos.y);
+			sf::Vector2f velocity = MathUtils::getSFpos(p.LinearVelocity.x, p.LinearVelocity.y);
+			 //sf::Vector2f velocity = MathUtils::getSFpos(p.nextTickLinearImpulse.x / 10, p.nextTickLinearImpulse.y / 10);
+			//sf::Color fillColor = p.color;
+
+			//float drawRadius = p.shape.radius;
+			//shape.setRadius(drawRadius);
+			//shape.setOrigin({ drawRadius, drawRadius });
+			//shape.setPosition(basePos);
+			//window->draw(shape);
+			sf::Vertex line[2] = {
+				sf::Vertex{ basePos, sf::Color::Green },
+				sf::Vertex{ sf::Vector2f(basePos.x + velocity.x, basePos.y + velocity.y), sf::Color::Green }
+			};
+			window->draw(line, 2, sf::PrimitiveType::LineStrip);
+		}
 	}
 	/*
 	sf::Image image({ 2400, 1350 }, sf::Color::Transparent);
@@ -270,25 +309,23 @@ namespace renderB2
 		shader.setUniform("texSize", sf::Vector2f{ 2400, 1350 });
 		window->draw(shape, &shader);
 		*/
-	//	window->draw(shape);
-	//}
-	/*
-	  // water
-	void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup group, renderB2::ScreenSettings screensettings) {
+		//	window->draw(shape);
+		//}
+		///*
+		  // water
+	void renderwater(sf::RenderWindow* window,
+		renderB2::RenderSettings rendersettings,
+		GameObjects::ParticleGroup& group,
+		renderB2::ScreenSettings screensettings)
+	{
 		sf::CircleShape shape(0.f, 10);
 		shape.setRotation(sf::degrees(90));
-		setRenderSettings(&shape, rendersettings);
 		shape.setOutlineThickness(0.f);
 		for (auto& p : group.Particles) {
-			if (MathUtils::b2Vec2Length(p.LinearVelocity) > 20.f) {
-				shape.setFillColor(sf::Color{ 255, 255, 255, 127 });
-			}
-			else {
-				shape.setFillColor(sf::Color{ 63, 72, 204 });
-			}
-			float radius = (float)std::min(std::max(p.neighborCount, 4), 5) / 5.f * (p.shape.radius * group.Config.Impact + 4.f);
+			shape.setFillColor(sf::Color{ 63, 72, 204 });
+			float radius = (float)std::min(std::max(p.neighborCount, 4), 5) / 5.f * (p.shape.radius * group.Config.Impact + 3.f);
 			if (p.neighborCount == 1) {
-				radius = (p.shape.radius * group.Config.Impact + 4.f) * 0.5f;
+				radius = (p.shape.radius * group.Config.Impact + 3.f) * 0.5f;
 			}
 			shape.setRadius(radius);
 			shape.setOrigin({ radius, radius });
@@ -296,15 +333,10 @@ namespace renderB2
 			window->draw(shape);
 		}
 		for (auto& p : group.Particles) {
-			if (MathUtils::b2Vec2Length(p.LinearVelocity) > 20.f) {
-				shape.setFillColor(sf::Color{ 255, 255, 255, 127 });
-			}
-			else {
-				shape.setFillColor(sf::Color{ 0, 168, 243 });
-			}
-			float radius = (float)std::min(std::max(p.neighborCount, 4), 5) / 5.f * (p.shape.radius * group.Config.Impact + 1.f);
+				shape.setFillColor(p.color);
+			float radius = (float)std::min(std::max(p.neighborCount, 4), 5) / 5.f * (p.shape.radius * group.Config.Impact / 1.5f);
 			if (p.neighborCount == 1) {
-				radius = (p.shape.radius * group.Config.Impact + 1.f) * 0.5f;
+				radius = (p.shape.radius * group.Config.Impact / 1.5f) * 0.5f;
 			}
 			shape.setRadius(radius);
 			shape.setOrigin({ radius, radius });
@@ -312,5 +344,6 @@ namespace renderB2
 			window->draw(shape);
 		}
 		return;
-	}*/
+	}
+	//*/
 }

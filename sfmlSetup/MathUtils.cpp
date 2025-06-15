@@ -7,18 +7,28 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <SFML/System.hpp>
-#include <optional> // Assuming std::optional is used
 
 namespace MathUtils
 {
-    float b2Vec2Length(const b2Vec2& v) {
-        return std::sqrt(v.x * v.x + v.y * v.y);
+    float Q_rsqrt(float number) {//Quake III Arena
+        long i;
+        float x2, y;
+        const float threehalfs = 1.5F;
+
+        x2 = number * 0.5F;
+        y = number;
+        i = *(long*)&y;             // evil floating point bit level hacking
+        i = 0x5f3759df - (i >> 1);  // what the f***?
+        y = *(float*)&i;
+        y = y * (threehalfs - (x2 * y * y));
+        y = y * (threehalfs - (x2 * y * y)); 
+        return y;
     }
 
-    b2Vec2 b2Vec2Normalized(const b2Vec2& v) {
-        float len = b2Vec2Length(v);
-        return (len > 0.0001f) ? b2Vec2{ v.x / len, v.y / len } : b2Vec2_zero;
+    float Q_sqrt(float x) {
+        return x * Q_rsqrt(x);
     }
+
     sf::Vector2f getSFpos(float x, float y) {
         return sf::Vector2f{ y, -x };
     }

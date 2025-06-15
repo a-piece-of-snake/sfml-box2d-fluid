@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <iostream>
 #include <vector>
 #include <cfloat>
@@ -19,6 +19,8 @@ namespace renderB2
         extern sf::Color WarningOutline;
         extern sf::Color WarningText;
         extern sf::Color TextBox;
+        extern sf::Color Button;
+        extern sf::Color LightBlue;
         extern sf::Color B2BodyFill;
     }
 
@@ -52,6 +54,8 @@ namespace renderB2
     void renderSoul(sf::RenderWindow* window, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
+    void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
+    void renderwater(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
 
     class MyUIObject {
     public:
@@ -61,6 +65,8 @@ namespace renderB2
         sf::Vector2f localPosition;
         float localRotation;
         sf::Vector2f localScale;
+        bool lineBreak = true;
+        float lineSpacing = 10.f;
 
         sf::Drawable* shape = nullptr;
 
@@ -73,6 +79,10 @@ namespace renderB2
         void addChild(MyUIObject* child) {
             if (child) {
                 child->parent = this;
+                if (child->lineBreak) {
+                    child->localPosition.y += nowLineSpacing;
+                    nowLineSpacing += child->lineSpacing + child->getBound().size.y;
+                }
                 children.push_back(child);
             }
         }
@@ -85,6 +95,23 @@ namespace renderB2
             transform.rotate(sf::degrees(localRotation));
             transform.scale(localScale);
             return transform;
+        }
+        sf::FloatRect  getBound() const {
+            sf::FloatRect bound;
+            if (auto shape2 = dynamic_cast<sf::Shape*>(shape))
+                bound = shape2->getLocalBounds();
+            else if (auto shape2 = dynamic_cast<sf::Text*>(shape))
+                bound = shape2->getLocalBounds();
+            /*
+			sf::FloatRect childBound;
+            for (MyUIObject* child : children)
+                if (child) {
+					childBound = child->getBound();
+					bound.size.x = std::max(bound.size.x, childBound.size.x);
+					bound.size.y = std::max(bound.size.y, childBound.size.y);
+                }
+            */
+            return bound;
         }
 
         virtual void draw(sf::RenderWindow* window) {
@@ -101,14 +128,131 @@ namespace renderB2
                 SFMLrenderShadow2(window, shape, getGlobalTransform(), thickness, repeat, shadowColor);
             }
         }
+     private:
+         float nowLineSpacing = 0.f;
     };
-    class UIButton : public MyUIObject {
+    class UICheckBox : public MyUIObject {
     public:
         std::function<void()> onHover;
+        std::function<void()> onHoverRelease;
         std::function<void()> onClick;
         std::function<void()> onHold;
         std::function<void()> onRelease;
         bool wasClicked;
+        bool wasHover;
+		bool isChecked;
+        sf::SoundBuffer ClickSoundBuffer;
+        sf::SoundBuffer ReleaseSoundBuffer;
+        sf::Sound ClickSound;
+        sf::Sound ReleaseSound;
+
+        UICheckBox(sf::Drawable* shp, const sf::Vector2f& pos = sf::Vector2f(0.f, 0.f),
+            float rotation = 0.f, const sf::Vector2f& scale = sf::Vector2f(1.f, 1.f), bool defaultValue = false)
+            : MyUIObject(shp, pos, rotation, scale), wasClicked(false), wasHover(false), isChecked(defaultValue),
+            ClickSound(ClickSoundBuffer), ReleaseSound(ReleaseSoundBuffer)
+        {
+            if (!ClickSoundBuffer.loadFromFile("Assets\\Sounds\\mouseclick.ogg")) {
+                std::cerr << "Failed to load ClickSoundBuffer!" << std::endl;
+            }
+            if (!ReleaseSoundBuffer.loadFromFile("Assets\\Sounds\\mouserelease.ogg")) {
+                std::cerr << "Failed to load ReleaseSoundBuffer!" << std::endl;
+            }
+
+            ClickSound.setBuffer(ClickSoundBuffer);
+            ReleaseSound.setBuffer(ReleaseSoundBuffer);
+            if (!checkedTexture.loadFromFile("Assets\\Textures\\checkbox_checked.png")) {
+                std::cerr << "Failed to load checkedTexture!" << std::endl;
+            }
+            if (!uncheckedTexture.loadFromFile("Assets\\Textures\\checkbox_unchecked.png")) {
+                std::cerr << "Failed to load uncheckedTexture!" << std::endl;
+            }
+            checkedShape.setSize({ 1.f, 1.f });
+            checkedShape.setTexture(&checkedTexture);
+
+            uncheckedShape.setSize({ 1.f, 1.f });
+            uncheckedShape.setTexture(&uncheckedTexture);
+
+        }
+
+        virtual sf::FloatRect getGlobalBounds() const {
+            if (auto s = dynamic_cast<const sf::Shape*>(shape))
+                return getGlobalTransform().transformRect(s->getLocalBounds());
+            return sf::FloatRect();
+        }
+
+        virtual void draw(sf::RenderWindow* window) override {
+            if (shape)
+                window->draw(*shape, getGlobalTransform());
+
+            checkedShape.setSize(getGlobalBounds().size);
+            uncheckedShape.setSize(getGlobalBounds().size);
+            sf::RectangleShape& box = isChecked ? checkedShape : uncheckedShape;
+            sf::Transform boxtransform = getGlobalTransform();
+            boxtransform.translate({ (getGlobalBounds().size.x - box.getGlobalBounds().size.x) / 2, (getGlobalBounds().size.y - box.getGlobalBounds().size.y) / 2 });
+            window->draw(box, boxtransform);
+
+            for (MyUIObject* child : children)
+                if (child)
+                    child->draw(window);
+        }
+
+        virtual void tick( sf::RenderWindow& window) {
+            sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);
+            sf::Vector2f mouseWorldPos = window.mapPixelToCoords(mousePixelPos);
+            sf::FloatRect bounds = getGlobalBounds();
+            bool hover = bounds.contains(mouseWorldPos);
+
+            if (hover) {
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Hand).value();
+                window.setMouseCursor(cursor);
+                wasHover = true;
+                if (onHover)
+                    onHover();
+                if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+                    if (!wasClicked) {
+						isChecked = !isChecked;
+                        if(onClick)
+							onClick();
+                    }
+                    else {
+                        if (onHold)
+                            onHold();
+                    }
+                    wasClicked = true;
+                }
+                else {
+                    if (wasClicked) {
+                        if (onRelease) {
+                            onRelease();
+                        }
+                    }
+                    wasClicked = false;
+                }
+            }
+            else if (wasHover) {
+                wasHover = false;
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow).value();
+                window.setMouseCursor(cursor);
+                if (onHoverRelease) {
+                    onHoverRelease();
+                }
+            }
+		}
+    private:
+        sf::Texture checkedTexture;
+        sf::Texture uncheckedTexture;
+        sf::RectangleShape checkedShape;
+        sf::RectangleShape uncheckedShape;
+    };
+    class UIButton : public MyUIObject {
+    public:
+        std::function<void()> onHover;
+        std::function<void()> onHoverRelease;
+        std::function<void()> onClick;
+        std::function<void()> onHold;
+        std::function<void()> onRelease;
+        bool wasClicked;
+        bool wasHover;
         sf::SoundBuffer ClickSoundBuffer;
         sf::SoundBuffer ReleaseSoundBuffer;
         sf::Sound ClickSound;
@@ -116,7 +260,7 @@ namespace renderB2
 
         UIButton(sf::Drawable* shp, const sf::Vector2f& pos = sf::Vector2f(0.f, 0.f),
             float rotation = 0.f, const sf::Vector2f& scale = sf::Vector2f(1.f, 1.f))
-            : MyUIObject(shp, pos, rotation, scale), wasClicked(false),
+            : MyUIObject(shp, pos, rotation, scale), wasClicked(false), wasHover(false),
             ClickSound(ClickSoundBuffer), ReleaseSound(ReleaseSoundBuffer)
         {
             if (!ClickSoundBuffer.loadFromFile("Assets\\Sounds\\mouseclick.ogg")) {
@@ -136,19 +280,22 @@ namespace renderB2
             return sf::FloatRect();
         }
 
-        virtual void tick( sf::RenderWindow& window) {
+        virtual void tick(sf::RenderWindow& window) {
             sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);
             sf::Vector2f mouseWorldPos = window.mapPixelToCoords(mousePixelPos);
             sf::FloatRect bounds = getGlobalBounds();
             bool hover = bounds.contains(mouseWorldPos);
 
             if (hover) {
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Hand).value();
+                window.setMouseCursor(cursor);
+                wasHover = true;
                 if (onHover)
                     onHover();
                 if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
                     if (!wasClicked) {
-                        if(onClick)
-							onClick();
+                        if (onClick)
+                            onClick();
                     }
                     else {
                         if (onHold)
@@ -165,16 +312,27 @@ namespace renderB2
                     wasClicked = false;
                 }
             }
-		}
+            else if (wasHover) {
+                wasHover = false;
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow).value();
+                window.setMouseCursor(cursor);
+                if (onHoverRelease) {
+                    onHoverRelease();
+                }
+            }
+        }
     };
     class UISlider : public MyUIObject {
     public:
         std::function<void()> onHover;
+        std::function<void()> onHoverRelease;
         std::function<void()> onClick;
         std::function<void()> onHold;
         std::function<void()> onRelease;
         std::function<void()> onValueChange;
         bool wasClicked;
+        bool wasHover;
+        bool dragging;
         sf::SoundBuffer ClickSoundBuffer;
         sf::SoundBuffer ReleaseSoundBuffer;
         sf::Sound ClickSound;
@@ -186,7 +344,7 @@ namespace renderB2
         sf::Drawable* button = nullptr; 
         UISlider(sf::Drawable* shp, sf::Drawable* butto, float min, float max, float value, const sf::Vector2f& pos = sf::Vector2f(0.f, 0.f),
             float rotation = 0.f, const sf::Vector2f& scale = sf::Vector2f(1.f, 1.f))
-            : MyUIObject(shp, pos, rotation, scale), button(butto), Max(max), Min(min), Value(value), LastTickValue(value), wasClicked(false),
+            : MyUIObject(shp, pos, rotation, scale), button(butto), Max(max), Min(min), Value(value), LastTickValue(value), wasClicked(false), wasHover(false), dragging(false),
             ClickSound(ClickSoundBuffer), ReleaseSound(ReleaseSoundBuffer)
         {
             if (!ClickSoundBuffer.loadFromFile("Assets\\Sounds\\mouseclick.ogg")) {
@@ -206,8 +364,16 @@ namespace renderB2
             return sf::FloatRect();
         }
         virtual sf::FloatRect getButtonGlobalBounds() const {
-            if (auto s = dynamic_cast<const sf::Shape*>(button))
-                return getGlobalTransform().transformRect(s->getLocalBounds());
+            if (auto s = dynamic_cast<const sf::Shape*>(button)) {
+                sf::Transform transform = getGlobalTransform();
+                sf::FloatRect bounds = getGlobalBounds();
+                sf::FloatRect bbounds = transform.transformRect(s->getLocalBounds());
+                float normalizedValue = (Value - Min) / (Max - Min);
+                float buttonX = normalizedValue * bounds.size.x - bbounds.size.x / 2;
+                float buttonY = 0;
+                transform.translate({ buttonX, buttonY });
+                return transform.transformRect(s->getLocalBounds());
+            }
             return sf::FloatRect();
         }
         virtual void draw(sf::RenderWindow* window) {
@@ -234,37 +400,51 @@ namespace renderB2
             sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);
             sf::Vector2f mouseWorldPos = window.mapPixelToCoords(mousePixelPos);
             sf::FloatRect bounds = getGlobalBounds();
-            bool hover = bounds.contains(mouseWorldPos);
+            sf::FloatRect bbounds = getButtonGlobalBounds();
+            bool hover = bbounds.contains(mouseWorldPos) || bounds.contains(mouseWorldPos);
+            bool leftPressed = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
 
-            if (hover) {
-                if (onHover)
-                    onHover();
-                if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
-					Value = std::clamp((mouseWorldPos.x - bounds.position.x) / bounds.size.x * (Max - Min) + Min, Min, Max);
-                    if (!wasClicked) {
-                        if (onClick)
-                            onClick();
-                    }
-                    else {
-                        if (onHold)
-                            onHold();
-                    }
-                    wasClicked = true;
+            if (hover && !wasHover) {
+                wasHover = true;
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Hand).value();
+                window.setMouseCursor(cursor);
+                if (onHover) onHover();
+            }
+
+            if (!hover && wasHover && !dragging) {
+                wasHover = false;
+                const auto cursor = sf::Cursor::createFromSystem(sf::Cursor::Type::Arrow).value();
+                window.setMouseCursor(cursor);
+                if (onHoverRelease) onHoverRelease();
+            }
+
+            if (leftPressed) {
+                if (!dragging && hover) {
+                    dragging = true;
+                    if (onClick) onClick();
+                }
+
+                if (dragging) {
+                    Value = std::clamp((mouseWorldPos.x - bounds.position.x) / bounds.size.x * (Max - Min) + Min, Min, Max);
+                    if (onHold) onHold();
                     if (onValueChange && LastTickValue != Value) {
                         onValueChange();
                     }
                 }
-                else {
-                    if (wasClicked) {
-                        if (onRelease) {
-                            onRelease();
-                        }
-                    }
-                    wasClicked = false;
-                }
+
+                wasClicked = true;
             }
-			LastTickValue = Value;
+            else {
+                if (dragging) {
+                    dragging = false;
+                    if (onRelease) onRelease();
+                }
+                wasClicked = false;
+            }
+
+            LastTickValue = Value;
         }
+
     };
 
 }
