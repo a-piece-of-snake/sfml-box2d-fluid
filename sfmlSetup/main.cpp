@@ -18,7 +18,6 @@
 #include <iomanip>
 #include <functional>
 #include <thread>
-#include <vector>
 #include <numeric>
 #include <sstream> 
 
@@ -33,10 +32,11 @@ sf::Vector2f lastmousePos;
 b2Vec2 worldPos;
 
 sf::Clock msclock;
+sf::Clock fpsClock;
 int tickCount = 0;
-sf::Clock tpsClock;
-float tps = 0.0f;
+float fps = 0.0f;
 sf::Time elapsed;
+sf::Time calculate;
 float elapsedTime;
 
 bool Drag = false;
@@ -173,20 +173,20 @@ void RenderUi() {
             leftUI->addChild(root);
         //}
         //{
-            if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-                tps = tickCount / tpsClock.getElapsedTime().asSeconds();
+            if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+                fps = tickCount / fpsClock.getElapsedTime().asSeconds();
                 tickCount = 0;
-                tpsClock.restart();
+                fpsClock.restart();
             }
             sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
             tpsshape.setFillColor(sf::Color::Transparent);
             tpsshape.setOutlineThickness(3.f);
             renderB2::MyUIObject* root2 = new renderB2::MyUIObject(&tpsshape, { 0, 0 }, 0);
             sf::Text awa2(renderB2::getDefaultFontAddress());
-            awa2.setString("TPS\n" + std::to_string((int)tps));
+            awa2.setString("FPS\n" + std::to_string((int)fps));
             awa2.setStyle(sf::Text::Bold);
             awa2.setCharacterSize(30.f);
-            if (tps <= 10) {
+            if (fps <= 60) {
                 tpsshape.setOutlineColor(renderB2::DefaultColors::WarningOutline);
                 awa2.setFillColor(renderB2::DefaultColors::WarningText);
             }
@@ -203,10 +203,10 @@ void RenderUi() {
             leftUI->addChild(root2);
         //}
         //{
-            if (tpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-                tps = tickCount / tpsClock.getElapsedTime().asSeconds();
+            if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+                fps = tickCount / fpsClock.getElapsedTime().asSeconds();
                 tickCount = 0;
-                tpsClock.restart();
+                fpsClock.restart();
             }
             sf::ConvexShape particlecount = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
             particlecount.setFillColor(sf::Color::Transparent);
@@ -359,7 +359,6 @@ struct B2ThreadContext {
     ThreadPool* pool;
 };
 
-// Box2D 要求你返回一个 “任务句柄”，可以是 future、vector、或者 nullptr
 void* MyEnqueueTask(
     void (*task)(int startIndex, int endIndex, uint32_t workerIndex, void* taskContext),
     int itemCount,
@@ -398,7 +397,7 @@ void MyFinishTask(void* taskHandle, void* userContext) {
 
 
 int main() {
-   window.setFramerateLimit(100);
+   window.setFramerateLimit(120);
    const sf::Image Icon("Assets\\Textures\\water2d.png");
    window.setIcon(Icon);
     //static ThreadPool particlePool(std::thread::hardware_concurrency());
@@ -434,7 +433,7 @@ int main() {
 
     b2BodyDef groundBodyDef2 = b2DefaultBodyDef();
     groundBodyDef2.position.x = 400.f;
-    groundBodyDef2.position.y = 600.0f;
+    groundBodyDef2.position.y = 1000.0f;
     groundBodyDef2.type = b2_staticBody;
     b2BodyId groundId2 = b2CreateBody(world.worldId, &groundBodyDef2);
     b2Polygon groundBox2 = b2MakeBox(1000.f, 10.0f);
@@ -444,7 +443,7 @@ int main() {
 
     b2BodyDef groundBodyDef3 = b2DefaultBodyDef();
     groundBodyDef3.position.x = 400.f;
-    groundBodyDef3.position.y = -600.f;
+    groundBodyDef3.position.y = -1000.f;
     groundBodyDef3.type = b2_staticBody;
     b2BodyId groundId3 = b2CreateBody(world.worldId, &groundBodyDef3);
     b2Polygon groundBox3 = b2MakeBox(1000.f, 10.f);
@@ -469,7 +468,7 @@ int main() {
     playerCircle.center = b2Vec2{ 0.0f, 0.0f };
     b2ShapeId playerShapeId = b2CreateCircleShape(playerId, &playerShapeDef, &playerCircle);
 
-    float timeStep = 0.2f;
+    float timeStep = 0.1f;
     int subStepCount = 4;
     renderB2::RenderSettings rendersettings;
     rendersettings.OutlineThickness = 1;
@@ -483,7 +482,16 @@ int main() {
     BackGround.setOutlineThickness(3);
     BackGround.setOutlineColor(renderB2::DefaultColors::BackGroundOutline);
     BackGround.setTexture(&BackGroundT);
-    BackGround.setTextureRect(sf::IntRect{ { 0, 0 }, { (int)(BackGround.getSize().x / 1.5), (int)(BackGround.getSize().y / 1.5) } });
+    BackGround.setTextureRect(sf::IntRect{
+    {
+         (int)-(BackGround.getSize().x / 3),
+         (int)-(BackGround.getSize().y / 3)
+    },
+    {
+         (int)(BackGround.getSize().x / 1.5),
+         (int)(BackGround.getSize().y / 1.5)
+    }
+        });
     /*
     //smoke
     {
@@ -553,7 +561,7 @@ int main() {
     lbutton->onRelease = [lbutton]() {
         lbutton->ReleaseSound.play();
         };
-    renderB2::UISlider* slider = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 200.f, fluid.Config.FORCE_SURFACE, sf::Vector2f(0.f, 0.f),
+    renderB2::UISlider* slider = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 5000.f, fluid.Config.FORCE_SURFACE, sf::Vector2f(0.f, 0.f),
          0.f, sf::Vector2f(1.f, 1.f));
     sf::Text* awa2 = new sf::Text(renderB2::getDefaultFontAddress());
     awa2->setString(std::to_string(slider->Value));
@@ -570,7 +578,7 @@ int main() {
         awa2->setString(oss2.str());
 		fluid.Config.FORCE_SURFACE = slider->Value;
 		};
-    renderB2::UISlider* slider2 = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 12.5f, fluid.Config.VISCOSITY, sf::Vector2f(0.f, 0.f),
+    renderB2::UISlider* slider2 = new renderB2::UISlider(sliderShape, buttonShape2, 0.f, 100.f, fluid.Config.VISCOSITY, sf::Vector2f(0.f, 0.f),
         0.f, sf::Vector2f(1.f, 1.f));
     sf::Text* awa3 = new sf::Text(renderB2::getDefaultFontAddress());
     awa3->setString(std::to_string(slider2->Value));
@@ -586,11 +594,13 @@ int main() {
         oss2 << std::fixed << std::setprecision(2) << slider2->Value;
         awa3->setString(oss2.str());
         fluid.Config.SHEAR_VISCOSITY = slider2->Value;
-        fluid.Config.VISCOSITY = slider2->Value;
-        fluid.Config.VISCOSITY_LEAVE = slider2->Value / 10.f;
+        fluid.Config.VISCOSITY = slider2->Value / 2.5f;
+        fluid.Config.VISCOSITY_LEAVE = slider2->Value / 25.f;
         };
 
     while (window.isOpen()) {
+        mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+        worldPos = MathUtils::toB2Position(mousePos.x, mousePos.y, worldView);
         window.clear(renderB2::DefaultColors::ClearFill);
         elapsed = msclock.restart();
         elapsedTime = elapsed.asMilliseconds();
@@ -600,9 +610,14 @@ int main() {
             }
             if (const auto* mousePressed = event->getIf<sf::Event::MouseButtonPressed>()) {
                 if (mousePressed->button == sf::Mouse::Button::Left) {
+
+                    if (B2_IS_NON_NULL(world.mouseJointId)) {
+                        b2DestroyJoint(world.mouseJointId);
+                        world.mouseJointId = {};
+                    }
                     b2AABB box;
                     b2Vec2 d = { 0.001f, 0.001f };
-					b2Vec2 p = MathUtils::toB2Position(mousePos.x, mousePos.y, worldView);
+					b2Vec2 p = worldPos;
                     box.lowerBound = b2Sub(p, d);
                     box.upperBound = b2Add(p, d);
 
@@ -612,6 +627,7 @@ int main() {
 
                     if (B2_IS_NON_NULL(queryContext.bodyId))
                     {
+                        b2Body_SetAwake(queryContext.bodyId, true);
                         b2BodyDef bodyDef = b2DefaultBodyDef();
                         world.groundBodyId = b2CreateBody(world.worldId, &bodyDef);
 
@@ -619,12 +635,11 @@ int main() {
                         mouseDef.bodyIdA = world.groundBodyId;
                         mouseDef.bodyIdB = queryContext.bodyId;
                         mouseDef.target = p;
-                        mouseDef.hertz = 5.0f;
+                        mouseDef.hertz = 2.5f;
                         mouseDef.dampingRatio = 0.7f;
-                        mouseDef.maxForce = 1000.0f * b2Body_GetMass(queryContext.bodyId);
+                        mouseDef.maxForce = 50.0f * b2Body_GetMass(queryContext.bodyId);
                         world.mouseJointId = b2CreateMouseJoint(world.worldId, &mouseDef);
 
-                        b2Body_SetAwake(queryContext.bodyId, true);
                     }
                 }
             }
@@ -654,17 +669,24 @@ int main() {
                             //createSquare(x, y, 0.5, 0.3, 0.1, 5);
                             //fluid.CreateParticle(world, -0.1, 4, x, y, 1.0f, 0.f, 0.1f); // smoke
                             fluid.CreateParticle(world, 1, 4, x, y, 2.5f, 0.f, 0.1f, sf::Color::Cyan); // water
+                            //fluid.CreateParticle(world, 1, 4, x, y, 2.5f, 2.f, 0.1f, sf::Color::Cyan); // sand
                             particleCount++;
                         }
                     }
                     selection.isSelecting = false;
                 }
             }
+            /*
+            if (const auto* MouseWheelScrolled = event->getIf<sf::Event::MouseWheelScrolled>()) {
+                float zoomFactor = (MouseWheelScrolled->delta > 0) ? 0.95f : 1.05f;
+                worldView.zoom(zoomFactor);
+            }
+            */
             if (const auto* mouseMoved = event->getIf<sf::Event::MouseMoved>()) {
                 if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Middle)) {
                     worldView.move({ (int)lastmousePos.x - (float)mouseMoved->position.x, (int)lastmousePos.y - (float)mouseMoved->position.y });
-					camX = worldView.getCenter().x - worldView.getSize().x / 2;
-					camY = worldView.getCenter().y - worldView.getSize().y / 2;
+                    camX = worldView.getCenter().x - worldView.getSize().x / 2;
+                    camY = worldView.getCenter().y - worldView.getSize().y / 2;
                 }
                 if (selection.isSelecting) {
                     selection.currentPos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
@@ -676,6 +698,7 @@ int main() {
                 {
                     PauseWorld = !PauseWorld;
                 }
+                /*
                 if (keyPressed->scancode == sf::Keyboard::Scan::F)
                 {
                     fluid.freeze();
@@ -684,14 +707,13 @@ int main() {
                 {
                     fluid.unfreeze();
                 }
+                */
                 if (keyPressed->scancode == sf::Keyboard::Scan::P)
                 {
                     renderParticle = (renderParticle + 1) % 4;
                 }
             }
         }
-        mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-        worldPos = MathUtils::toB2Position(mousePos.x, mousePos.y, worldView);
 
 
 
@@ -708,7 +730,7 @@ int main() {
             fluid.CreateParticle(world, 1, 3, worldPos.x, worldPos.y, 1.5f, 0.f, 0.1f, sf::Color::Red);// water
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num3)) {
-            createCircle(worldPos.x, worldPos.y, 0.2, 0.25, 0.1, 5);
+            createCircle(worldPos.x, worldPos.y, 0.5, 0.25, 0.1, 5);
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num2)) {
             createSquare(worldPos.x, worldPos.y, 0.1, 0.3, 0.1, 50);
@@ -747,6 +769,18 @@ int main() {
             b2World_Explode(world.worldId, &Dragdef);
         }
 
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+            if (B2_IS_NON_NULL(world.mouseJointId)) {
+                b2Body_SetAwake(b2Joint_GetBodyB(world.mouseJointId), true);
+                b2MouseJoint_SetTarget(world.mouseJointId, worldPos);
+            }
+        }
+        else {
+            if (B2_IS_NON_NULL(world.mouseJointId)) {
+                b2DestroyJoint(world.mouseJointId);
+                world.mouseJointId = {};
+            }
+        }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {
             Drag = true;
             sf::Vector2i mousePos = sf::Mouse::getPosition(window);
@@ -774,47 +808,20 @@ int main() {
             force.y = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right) - sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left);
             b2Body_SetLinearVelocity(playerId, force * 30.f);
         }
-        /*
-        {//控制玩家
-            b2Vec2 force = b2Vec2_zero;
-            b2Vec2 jumpforce = b2Vec2_zero;
-            b2Vec2 ovelocity = b2Body_GetLinearVelocity(playerId);
-            force.y = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right) - sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left);
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up)) {
-                std::vector<b2ContactData> contactData;
-                int capacity = b2Shape_GetContactCapacity(playerShapeId);
-                contactData.resize(capacity);
-                int count = b2Body_GetContactData(playerId, contactData.data(), capacity);
-                for (int i = 0; i < count; ++i) {
-                    b2Manifold manifold = contactData[i].manifold;
-
-                    b2BodyId bodyIdA = b2Shape_GetBody(contactData[i].shapeIdA);
-                    b2BodyId bodyIdB = b2Shape_GetBody(contactData[i].shapeIdB);
-                    std::string nameA = b2Body_GetName(bodyIdA);
-                    std::string nameB = b2Body_GetName(bodyIdB);
-                    for (int k = 0; k < manifold.pointCount; ++k) {
-                        b2ManifoldPoint point = manifold.points[k];
-                        b2Vec2 pos = point.point;
-                        jumpforce += b2Normalize(pos - b2Body_GetPosition(playerId));
-                    }
-                }
-            }
-            jumpforce = b2Normalize(jumpforce) * -50.f;
-            b2Body_SetLinearVelocity(playerId, (b2Vec2{ jumpforce.x, (force * 20.f).y + ovelocity.y / 2.f + jumpforce.y })  + b2World_GetGravity(world.worldId) * 0.f);
-        }
-        */
-
+        //物理
         if (!PauseWorld) {
-            fluid.UpdateData(world);
-            fluid.ComputeParticleForces();
-            for (const auto& p : fluid.Particles) {
-                b2Body_ApplyLinearImpulseToCenter(p.bodyId, p.nextTickLinearImpulse, true);
-                b2Body_ApplyForceToCenter(p.bodyId, p.nextTickForce, true);
-            }
-            b2World_Step(world.worldId, timeStep, subStepCount);
+            //for (int _i = 0; _i < 10; _i++) {
+
+                fluid.UpdateData(world);
+                fluid.ComputeParticleForces(timeStep);
+
+
+
+                b2World_Step(world.worldId, timeStep, subStepCount);
+            //}
         }
 
-
+        /*
         BackGround.setTextureRect(sf::IntRect{
             {
                  (int)-(BackGround.getSize().x / 3),
@@ -825,6 +832,7 @@ int main() {
                  (int)(BackGround.getSize().y / 1.5)
             }
             });
+            */
         window.setView(uiView);
         window.draw(BackGround);
         window.setView(worldView);
@@ -855,7 +863,7 @@ int main() {
             renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
             break;
         case 2:
-            renderB2::renderwater(&window, rendersettings, fluid, screensettings);
+            renderB2::renderwatershader(&window, rendersettings, fluid, screensettings);
             break;
         case 3:
             renderB2::renderparticletest(&window, rendersettings, fluid, screensettings);
@@ -888,6 +896,18 @@ int main() {
         }
 
         rendersettings.verticecount = 4;
+
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+            if (B2_IS_NON_NULL(world.mouseJointId)) {
+                b2Vec2 posA = b2MouseJoint_GetTarget(world.mouseJointId);
+                b2Vec2 posB = b2Body_GetPosition(b2Joint_GetBodyB(world.mouseJointId));
+                sf::Vertex line[2] = {
+                    sf::Vertex{ MathUtils::getSFpos(posA.x, posA.y), sf::Color::White},
+                    sf::Vertex{ MathUtils::getSFpos(posB.x, posB.y), sf::Color::Red }
+                };
+                window.draw(line, 2, sf::PrimitiveType::LineStrip);
+            }
+        }
 
         window.setView(uiView);
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A) || sf::Mouse::isButtonPressed(sf::Mouse::Button::Right)) {

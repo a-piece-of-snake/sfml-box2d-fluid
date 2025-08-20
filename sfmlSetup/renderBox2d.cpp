@@ -24,6 +24,7 @@ namespace renderB2
 	sf::Font DefaultFont("Assets\\Fonts\\CangJiGaoDeGuoMiaoHei_CJgaodeguomh_2.ttf");
 	sf::Texture Smoke("Assets\\Textures\\smoke.png");
 	sf::Texture Soul("Assets\\Textures\\Soul.png");
+	const int MAX_PARTICLES = 1000;
 
 	sf::Font getDefaultFont() {
 		DefaultFont.setSmooth(false);
@@ -231,9 +232,9 @@ namespace renderB2
 		renderB2::ScreenSettings screensettings)
 	{
 		//sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size() * 9);
-		sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size() * 5);
+		sf::VertexArray point(sf::PrimitiveType::Triangles, group.Particles.size() * 3);
 		int count = 0;
-		const sf::Vector2f offset[5] = { { 0, 0 },   { 1, 0 },   { -1, 0 },   { 0, 1 },   { 0, -1 } };
+		const sf::Vector2f offset[3] = { { 3, 0 },   { -3, 3 },   { -3, -3 } };
 		for (const auto& p : group.Particles)
 		{
 			const sf::Vector2f center = MathUtils::getSFpos(p.pos.x, p.pos.y);
@@ -246,11 +247,8 @@ namespace renderB2
 				}
 			}
 			*/
-			for (int i = 0; i < 5; ++i) {
-				if (b2Body_IsAwake(p.bodyId))
-					point[count].color = p.color;
-				else
-					point[count].color = sf::Color::Yellow;
+			for (int i = 0; i < 3; ++i) {
+				point[count].color = p.color;
 				point[count].position = center + offset[i];
 				count++;
 			}
@@ -343,6 +341,40 @@ namespace renderB2
 			shape.setPosition(MathUtils::getSFpos(p.pos.x, p.pos.y));
 			window->draw(shape);
 		}
+		return;
+	}
+
+	sf::Image particle;
+	void renderwatershader(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
+		int size = group.Particles.size();
+		particle.resize({ 2, (unsigned int)size});
+		sf::RectangleShape shape(sf::Vector2f(window->getSize()));
+		shape.setPosition(window->mapPixelToCoords({ 0 ,0 }));
+		sf::Glsl::Vec2 posg[1000];
+		sf::Vector2u winSize = window->getSize();
+		sf::Vector2f halfRes = sf::Vector2f(winSize.x / 2.f, winSize.y / 2.f);
+		float scale = winSize.y; 
+
+		for (int i = 0; i < std::min(size, MAX_PARTICLES); ++i) {
+			sf::Vector2f worldPos = MathUtils::getSFpos(group.Particles[i].pos.x, group.Particles[i].pos.y);
+			sf::Vector2f screenPos = (sf::Vector2f)window->mapCoordsToPixel(worldPos);
+			sf::Vector2f normalized = (screenPos - halfRes) / scale; // ×ª»»Îª [-1, 1] ¿Õ¼ä
+			posg[i] = sf::Glsl::Vec2(normalized);
+			particle.setPixel({ 0, (unsigned int)i }, MathUtils::encodeFloatToRGBA(screenPos.x));
+			particle.setPixel({ 1, (unsigned int)i }, MathUtils::encodeFloatToRGBA(screenPos.y));
+			//shape.setFillColor(MathUtils::encodeFloatToRGBA(screenPos.y));
+			//std::cout << MathUtils::encodeFloatToRGBA(screenPos.x).r;
+		}
+
+		sf::Shader shader;
+		if (!shader.loadFromFile("Assets\\Shaders\\metaball.frag", sf::Shader::Type::Fragment)) {
+		}
+		shader.setUniform("iResolution", sf::Vector2f(window->getSize()));
+		shader.setUniformArray("particle", posg, std::min(size, MAX_PARTICLES));
+		shader.setUniform("particleCount", std::min(size, MAX_PARTICLES));
+		particle.saveToFile("Assets\\Textures\\particle.png");
+		window->draw(shape , & shader);
+		
 		return;
 	}
 	//*/

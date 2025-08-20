@@ -17,7 +17,7 @@
 #include "MathUtils.h"
 namespace GameObjects
 {
-
+    //const float G = 6.6743f;
     struct World
     {
         b2WorldId worldId;
@@ -27,6 +27,7 @@ namespace GameObjects
     };
 
     struct Particle {
+        int index;
         int life = -1;
         int age = 0;
         float mass = 1.f;
@@ -34,6 +35,7 @@ namespace GameObjects
         b2Vec2 LinearVelocity = b2Vec2_zero;
         b2Vec2 nextTickForce = b2Vec2_zero;
         b2Vec2 nextTickLinearImpulse = b2Vec2_zero;
+		unsigned int bubleTime = 0;
 
         sf::Color color = sf::Color::Cyan;
         b2BodyId bodyId;
@@ -51,15 +53,14 @@ namespace GameObjects
         float restitution = 0.01f;
         float Impact = 5.f;
         float MomentumCoefficient = 1.f;
-        float SHEAR_VISCOSITY = 0.75f;
-        float FORCE_MULTIPLIER = 900.f;
-        float FORCE_SURFACE = 25.f;
+        float FORCE_MULTIPLIER = 15000.f;
+        float FORCE_SURFACE = 75.f;
         float FORCE_ADHESION = 0.f;
-        float VISCOSITY = 0.75f; 
-        float VISCOSITY_LEAVE = 0.05f;  
+        float SHEAR_VISCOSITY = 20.f;
+        float VISCOSITY = 8.f; 
+        float VISCOSITY_LEAVE = 0.8f;  
     };
     
-
     struct ParticleGroup {
         void init();
         std::vector<GameObjects::Particle> Particles;
@@ -93,8 +94,9 @@ namespace GameObjects
         float GetForce(float dst, float radius);
         void freeze();
         void unfreeze();
-        void ComputeChunkForces(int start, int end);
-        void ComputeParticleForces();
+        void ComputeChunkForces(int start, int end, int threadID, float timestep);
+        void ApplyForce(int start, int end);
+        void ComputeParticleForces(float timestep);
 		std::mutex mutex;
     };
 }

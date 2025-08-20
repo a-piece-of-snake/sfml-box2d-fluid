@@ -1,3 +1,5 @@
+//by chatgpt
+
 #pragma once
 #include <vector>
 #include <deque>
@@ -8,28 +10,42 @@
 #include <functional>
 #include <random>
 #include <atomic>
+#include <memory>
+#include <algorithm>
 
 class ThreadPool {
 public:
-    explicit ThreadPool(size_t numThreads) : stop(false), indexDist(0, numThreads ? numThreads - 1 : 0) {
+    explicit ThreadPool(size_t numThreads) : stop(false), rng(std::random_device{}()) {
         if (numThreads == 0) numThreads = 1;
 
         queues.resize(numThreads);
+        mutexes.reserve(numThreads);
+        cvs.reserve(numThreads);
+        for (size_t i = 0; i < numThreads; ++i) {
+            mutexes.emplace_back(std::make_unique<std::mutex>());
+            cvs.emplace_back(std::make_unique<std::condition_variable>());
+        }
+
         for (size_t i = 0; i < numThreads; ++i) {
             workers.emplace_back([this, i] { this->workerLoop(i); });
         }
     }
 
     ~ThreadPool() {
-        stop = true;
-        condition.notify_all();
-        for (auto& t : workers)
+        stop.store(true, std::memory_order_release);
+        // 唤醒所有等待的线程
+        for (auto& cv : cvs) {
+            cv->notify_all();
+        }
+        for (auto& t : workers) {
             if (t.joinable()) t.join();
+        }
     }
 
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
+    // 提交任务，自动负载均衡：选择当前任务数最少队列加入
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
         using return_type = decltype(f(args...));
@@ -37,46 +53,76 @@ public:
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
         auto wrapper = [task]() { (*task)(); };
+
+        // 负载均衡：找到最短队列
+        size_t idx = findShortestQueue();
+
         {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            size_t i = indexDist(rng);
-            queues[i].emplace_back(std::move(wrapper));
+            std::lock_guard<std::mutex> lock(*mutexes[idx]);
+            queues[idx].emplace_front(std::move(wrapper)); // 入队头部，保证本线程优先处理
         }
-        condition.notify_one();
+        cvs[idx]->notify_one();
+
         return task->get_future();
     }
 
 private:
     std::vector<std::thread> workers;
     std::vector<std::deque<std::function<void()>>> queues;
-    std::mutex queueMutex;
-    std::condition_variable condition;
-    std::atomic<bool> stop;
+    std::vector<std::unique_ptr<std::mutex>> mutexes;
+    std::vector<std::unique_ptr<std::condition_variable>> cvs;
 
-    std::mt19937 rng{ std::random_device{}() };
-    std::uniform_int_distribution<size_t> indexDist;
+    std::atomic<bool> stop;
+    std::mt19937 rng;
+
+    // 找到任务最少的队列索引
+    size_t findShortestQueue() {
+        size_t bestIndex = 0;
+        size_t bestSize = SIZE_MAX;
+        for (size_t i = 0; i < queues.size(); ++i) {
+            std::lock_guard<std::mutex> lock(*mutexes[i]);
+            size_t sz = queues[i].size();
+            if (sz < bestSize) {
+                bestSize = sz;
+                bestIndex = i;
+                if (bestSize == 0) break; // 找到空队列立刻用
+            }
+        }
+        return bestIndex;
+    }
 
     void workerLoop(size_t index) {
-        while (!stop) {
+        while (true) {
             std::function<void()> task;
 
             {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                condition.wait(lock, [this, index] {
-                    return stop || !queues[index].empty() || hasTaskToSteal(index);
+                std::unique_lock<std::mutex> lock(*mutexes[index]);
+                cvs[index]->wait(lock, [this, index] {
+                    return stop.load(std::memory_order_acquire) || !queues[index].empty();
                     });
 
-                if (stop) break;
+                if (stop.load(std::memory_order_acquire) && queues[index].empty()) {
+                    return; // 退出线程
+                }
 
                 if (!queues[index].empty()) {
-                    task = std::move(queues[index].front());
+                    task = std::move(queues[index].front()); // 从队列头部取任务
                     queues[index].pop_front();
                 }
-                else {
-                    size_t victim = findVictim(index);
-                    if (victim != index && !queues[victim].empty()) {
-                        task = std::move(queues[victim].back());
-                        queues[victim].pop_back();
+            }
+
+            if (!task) {
+                // 没有本地任务，尝试从其他队列尾部窃取
+                for (size_t offset = 1; offset < queues.size(); ++offset) {
+                    size_t victim = (index + offset) % queues.size();
+                    if (mutexes[victim]->try_lock()) {
+                        if (!queues[victim].empty()) {
+                            task = std::move(queues[victim].back());
+                            queues[victim].pop_back();
+                            mutexes[victim]->unlock();
+                            break;
+                        }
+                        mutexes[victim]->unlock();
                     }
                 }
             }
@@ -85,21 +131,5 @@ private:
                 task();
             }
         }
-    }
-
-    bool hasTaskToSteal(size_t selfIndex) {
-        for (size_t i = 0; i < queues.size(); ++i) {
-            if (i == selfIndex) continue;
-            if (!queues[i].empty()) return true;
-        }
-        return false;
-    }
-
-    size_t findVictim(size_t selfIndex) {
-        for (size_t offset = 1; offset < queues.size(); ++offset) {
-            size_t i = (selfIndex + offset) % queues.size();
-            if (!queues[i].empty()) return i;
-        }
-        return selfIndex;
     }
 };

@@ -11,6 +11,8 @@
 
 namespace MathUtils
 {
+    sf::Color encodeFloatToRGBA(float value);
+
     float Q_sqrt(float x);
 
     sf::Vector2f getSFpos(float x, float y);

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sfmlExample", "sfmlSetup\sfmlSetup.vcxproj", "{D16BA13E-46BF-4847-A254-EEBB12147F7A}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SFML-Box2d-fluid", "sfmlSetup\sfmlSetup.vcxproj", "{D16BA13E-46BF-4847-A254-EEBB12147F7A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

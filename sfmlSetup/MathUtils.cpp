@@ -10,6 +10,23 @@
 
 namespace MathUtils
 {
+    sf::Color encodeFloatToRGBA(float value) {
+        union {
+            float f;
+            uint32_t i;
+        } u;
+        u.f = value;
+
+        std::uint8_t r = (u.i >> 24) & 0xFF;
+        std::uint8_t g = (u.i >> 16) & 0xFF;
+        std::uint8_t b = (u.i >> 8) & 0xFF;
+        //std::uint8_t a = u.i & 0xFF;
+
+        //return sf::Color(r, g, b, a);
+        return sf::Color(r, g, b, 255); 
+
+    }
+
     float Q_rsqrt(float number) {//Quake III Arena
         long i;
         float x2, y;
