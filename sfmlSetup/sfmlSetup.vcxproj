@@ -105,14 +105,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\include;E:\box2d-main\box2d-main\include;E:\box2d-main\box2d-main\extern\glad\include;E:\box2d-main\box2d-main\shared;E:\box2cpp-master\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\include;E:\box2d-main\box2d-main\include;E:\box2d-main\box2d-main\extern\glad\include;E:\box2d-main\box2d-main\shared;E:\box2cpp-master\include;E:\c++\imgui\imgui1.92.2b\backends;%(AdditionalIncludeDirectories);$(SolutionDir)\imgui\</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\lib;E:\box2d-main\box2d-main\src;E:\box2d-main\box2d-main\src\..\include;E:\box2dbuild\src\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system-d.lib;sfml-graphics-d.lib;sfml-audio-d.lib;sfml-window-d.lib;sfml-network-d.lib;box2dd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system-d.lib;sfml-graphics-d.lib;sfml-audio-d.lib;sfml-window-d.lib;sfml-network-d.lib;box2dd.lib;%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -123,7 +123,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\include;E:\box2d-main\box2d-main\src\..\include;E:\box2d-main\box2d-main\extern\glad\include;E:\box2d-main\box2d-main\shared;E:\box2dbuild\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\include;E:\box2d-main\box2d-main\src\..\include;E:\box2d-main\box2d-main\extern\glad\include;E:\box2d-main\box2d-main\shared;E:\box2dbuild\src;%(AdditionalIncludeDirectories);$(SolutionDir)\imgui\</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -132,17 +132,36 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>E:\SFML-3.0.0-windows-vc17-64-bit\SFML-3.0.0\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system.lib;sfml-graphics.lib;sfml-audio.lib;sfml-window.lib;sfml-network.lib;E:\box2dbuild\src\Release\box2d.lib;E:\box2dbuild\shared\Release\shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system.lib;sfml-graphics.lib;sfml-audio.lib;sfml-window.lib;sfml-network.lib;E:\box2dbuild\src\Release\box2d.lib;E:\box2dbuild\shared\Release\shared.lib;%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Game.cpp" />
+    <ClCompile Include="imgui\imgui-SFML.cpp" />
+    <ClCompile Include="imgui\imgui.cpp" />
+    <ClCompile Include="imgui\imgui_demo.cpp" />
+    <ClCompile Include="imgui\imgui_draw.cpp" />
+    <ClCompile Include="imgui\imgui_tables.cpp" />
+    <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MathUtils.cpp" />
     <ClCompile Include="renderBox2d.cpp" />
     <ClCompile Include="GameObjects.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ColorfulLog.h" />
+    <ClInclude Include="Game.h" />
     <ClInclude Include="GameObjects.h" />
+    <ClInclude Include="imgui\imconfig-SFML.h" />
+    <ClInclude Include="imgui\imconfig.h" />
+    <ClInclude Include="imgui\imfilebrowser.h" />
+    <ClInclude Include="imgui\imgui-SFML.h" />
+    <ClInclude Include="imgui\imgui-SFML_export.h" />
+    <ClInclude Include="imgui\imgui.h" />
+    <ClInclude Include="imgui\imgui_internal.h" />
+    <ClInclude Include="imgui\imstb_rectpack.h" />
+    <ClInclude Include="imgui\imstb_textedit.h" />
+    <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="MathUtils.h" />
     <ClInclude Include="Player.h" />
     <ClInclude Include="renderBox2d.h" />

@@ -24,6 +24,8 @@ namespace GameObjects
         sf::Clock clock;
         b2JointId mouseJointId = b2_nullJointId;
         b2BodyId groundBodyId;
+		float timeStep;
+		int subStep;
     };
 
     struct Particle {
