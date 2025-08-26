@@ -1,14 +1,5 @@
-#include <iostream>
-#include <vector>
-#include <cfloat>
-#include <algorithm>
-#include <box2d/box2d.h>
-#include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/System.hpp>
 #include "renderBox2d.h"
-#include "GameObjects.h"
-#include "MathUtils.h"
+
 namespace renderB2
 {
 	namespace DefaultColors {

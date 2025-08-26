@@ -1,4 +1,4 @@
-#include "Game.h"
+Ôªø#include "Game.h"
 
 Game::Game()
     : window(sf::VideoMode({ 2400, 1350 }), "AWA", sf::Style::Default),
@@ -9,25 +9,16 @@ Game::Game()
 Game::~Game() {}
 
 void Game::Init() {
-    window.setFramerateLimit(120);
+    InitWindow();
 
-    const sf::Image Icon("Assets\\Textures\\water2d.png");
-    window.setIcon(Icon);
+    InitImGui();
 
-    sf::View view(sf::FloatRect({ 0.f, 0.f }, { (float)width, (float)height }));
-    window.setView(view);
+    LoadResources();
 
-    ImGuiInit();
-
-
-
-
-    BackGroundT.loadFromFile("Assets\\Textures\\BackGround.png");
-    BackGroundT.setRepeated(true);
-    Snake.loadFromFile("Assets\\Textures\\snake.png");
-    smoothFunctionT.loadFromFile("Assets\\Textures\\SmoothFunction.png");
+    setConsoleTitle("Game Logs");
 
     fluid.init();
+
     InitScene();
 
     SUCCESS("Successfully initialized the game!");
@@ -45,7 +36,46 @@ void Game::Destroy() {
     ImGui::SFML::Shutdown();
 }
 
-void Game::ImGuiInit() {
+void Game::InitWindow() {
+
+    window.setFramerateLimit(120);
+
+    #ifdef _WIN32
+        #pragma comment(lib, "dwmapi.lib")
+        HWND hwnd = window.getNativeHandle();
+
+        BOOL enabled = FALSE;
+        HRESULT hr = DwmIsCompositionEnabled(&enabled);
+
+        if (SUCCEEDED(hr) && enabled) {
+            BOOL isDarkMode = TRUE;
+            HRESULT hr = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &isDarkMode,
+                sizeof(isDarkMode)
+            );
+
+            if (FAILED(hr)) {
+                DWORD color = 0x000000;
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_CAPTION_COLOR,
+                    &color,
+                    sizeof(color)
+                );
+            }
+        }
+    #endif
+
+    const sf::Image Icon("Assets\\Textures\\water2d.png");
+    window.setIcon(Icon);
+
+    sf::View view(sf::FloatRect({ 0.f, 0.f }, { (float)width, (float)height }));
+    window.setView(view);
+}
+
+void Game::InitImGui() {
     if (!ImGui::SFML::Init(window)) ERROR("Failed to initialized Imgui!");
     
     ImGuiIO& io = ImGui::GetIO();
@@ -119,7 +149,7 @@ void Game::InitScene() {
     b2CreatePolygonShape(groundId3, &groundShapeDef3, &groundBox3);
     mapBodyId.push_back(groundId3);
     /*
-    b2BodyDef playerDef = b2DefaultBodyDef();//∂®“ÂÕÊº“
+    b2BodyDef playerDef = b2DefaultBodyDef();//ÂÆö‰πâÁé©ÂÆ∂
     playerDef.fixedRotation = true;
     playerDef.isBullet = true;
     playerDef.position = { 100, 100 };
@@ -138,6 +168,34 @@ void Game::InitScene() {
     */
 	SUCCESS("Successfully initialized the scene!");
    }
+
+void Game::LoadResources() {
+    BackGroundT.loadFromFile("Assets\\Textures\\BackGround.png");
+    BackGroundT.setRepeated(true);
+    Snake.loadFromFile("Assets\\Textures\\snake.png");
+    smoothFunctionT.loadFromFile("Assets\\Textures\\SmoothFunction.png");
+
+    resources.shaderlist.addShader("Star", "", "", "Assets\\Shaders\\star.frag");
+
+    {
+        GameObjects::SpawnableObject testobj;
+	    testobj.name = "TestObj";
+	    testobj.type = "Test";
+	    testobj.describe = "This is a test object.";
+	    testobj.icon = Snake;
+	    spawnBrowser.addObject(testobj);
+    }
+    {
+        GameObjects::SpawnableObject testobj2;
+        testobj2.name = "TestObj2";
+        testobj2.type = "Test";
+        testobj2.describe = "This is a test object.";
+        testobj2.icon = smoothFunctionT;
+        spawnBrowser.addObject(testobj2);
+    }
+
+    SUCCESS("Successfully loaded resouces!");
+}
 
 void Game::Update() {
     mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
@@ -229,13 +287,20 @@ void Game::RenderSKeyOverlay() {
     {
         sf::CircleShape starbackground(100, 32);
         starbackground.setOrigin({ 100, 100 });
-        sf::Shader starShader;
-        if (starShader.loadFromFile("Assets\\Shaders\\star.frag", sf::Shader::Type::Fragment)) ERROR("Failed to load shader!");
-        
-        starbackground.move({ (float)mousePos.x, (float)mousePos.y });
-        starShader.setUniform("iResolution", sf::Vector2f(window.getSize()));
-        starShader.setUniform("iTime", world.clock.getElapsedTime().asSeconds());
-        window.draw(starbackground, &starShader);
+
+        sf::Shader* starShaderPtr = resources.shaderlist.getShader("Star");
+
+        if (starShaderPtr) {
+            sf::Shader& starShader = *starShaderPtr;
+            starbackground.move({ (float)mousePos.x, (float)mousePos.y });
+            starShader.setUniform("iResolution", sf::Vector2f(window.getSize()));
+            starShader.setUniform("iTime", world.clock.getElapsedTime().asSeconds());
+            window.draw(starbackground, &starShader);
+        }
+        else {
+            ERROR("Shader not found!");
+			return;
+        }
     }
     /*
     std::ostringstream oss;
@@ -257,28 +322,45 @@ void Game::RenderSKeyOverlay() {
 }
 
 void Game::ImGuiRelated() {
+
     ImGui::SFML::Update(window, deltaClock.restart());
 
     //ImGui::ShowDemoWindow();
+
+    if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent)) {
+		showConsole = !showConsole;
+    }
+	consoleAnimation = showConsole ? consoleAnimation + 1.f : consoleAnimation - 1.f;
+    consoleAnimation = std::clamp(consoleAnimation, -40.f, 10.f);
+    ImguiConsoleInputBox(10.f, consoleAnimation);
+
+    ImguiSpawnBrowser();
+
+    ImguiMainMenuBar();
 
     if (ImGui::Begin("Fluid parameters")) {
 
 	    ImGui::Text("Particle count: %d", particleCount);
         ImGui::Text("Ctrl + Click to edit it");
 
-        ImGui::SliderFloat("surface", &fluid.Config.FORCE_SURFACE, 0.f, 5000.f, nullptr, ImGuiSliderFlags_None);
+        ImGui::SliderFloat("surface##Slider", &fluid.Config.FORCE_SURFACE, 0.f, 5000.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
 		    if (ImGui::ArrowButton("##surface left", ImGuiDir_Left)) fluid.Config.FORCE_SURFACE -= 10.f;
             ImGui::SameLine();
 		    if (ImGui::ArrowButton("##surface right", ImGuiDir_Right)) fluid.Config.FORCE_SURFACE += 10.f;
+            ImGui::SameLine();
+			if (ImGui::Button("reset##surface")) fluid.Config.FORCE_SURFACE = 75.f;
 
-        ImGui::SliderFloat("viscosity", &fluid.Config.SHEAR_VISCOSITY, 0.f, 120.f, nullptr, ImGuiSliderFlags_None);
+        ImGui::SliderFloat("viscosity##Slider", &fluid.Config.SHEAR_VISCOSITY, 0.f, 110.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
             if (ImGui::ArrowButton("##viscosity left", ImGuiDir_Left)) fluid.Config.SHEAR_VISCOSITY -= 1.f;
             ImGui::SameLine();
             if (ImGui::ArrowButton("##viscosity right", ImGuiDir_Right)) fluid.Config.SHEAR_VISCOSITY += 1.f;
+            ImGui::SameLine();
+            if (ImGui::Button("reset##viscosity")) fluid.Config.SHEAR_VISCOSITY = 20.f;
+
 		fluid.Config.VISCOSITY = fluid.Config.SHEAR_VISCOSITY * 0.4f;
-        fluid.Config.VISCOSITY_LEAVE = fluid.Config.SHEAR_VISCOSITY * 0.04f;
+        fluid.Config.VISCOSITY_LEAVE = fluid.Config.SHEAR_VISCOSITY * 0.02f;
 
     }ImGui::End();
 
@@ -287,13 +369,14 @@ void Game::ImGuiRelated() {
         // open file dialog when user clicks this button
         if (ImGui::Button("open file dialog"))
             fileDialog.Open();
-    }
-    ImGui::End();
+
+    }ImGui::End();
+    
     fileDialog.Display();
 
     if (fileDialog.HasSelected())
     {
-        std::cout << "Selected filename" << fileDialog.GetSelected().string() << std::endl;
+		DEBUG("Selected filename: %s", fileDialog.GetSelected().string().c_str());
         fileDialog.ClearSelected();
     }
 }
@@ -352,7 +435,7 @@ void Game::HandleEvent(const sf::Event& event) {
             //const float gridSize = 75;
             float stepX = (maxX - minX) / (Xlen * gridSize / window.getSize().x);
             float stepY = (maxY - minY) / (Ylen * gridSize / window.getSize().y);
-            std::cout << "selection : x:" << (Xlen * gridSize / window.getSize().x) << "y:" << (Ylen * gridSize / window.getSize().y) << std::endl;
+            DEBUG("Selection X: %f Y: %f", (Xlen * gridSize / window.getSize().x), (Ylen * gridSize / window.getSize().y));
             for (int i = 0; i < (Xlen * gridSize / window.getSize().x); ++i) {
                 for (int j = 0; j < (Ylen * gridSize / window.getSize().y); ++j) {
                     float x = minX + i * stepX + stepX / 2;
@@ -457,7 +540,7 @@ void Game::DrawWorld() {
         renderB2::renderparticletest(&window, rendersettings, fluid, screensettings);
         break;
     default:
-        std::cout << "RenderError" << std::endl;
+		ERROR("RenderParticle mode error!");
     }
 
     /*
@@ -502,27 +585,29 @@ void Game::DrawWorld() {
 }
 
 void Game::KeyLogic() {
-    //std::cout << worldPos.x << " " << worldPos.y << std::endl;
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num5)) {
         particleCount++;
-        //fluid.CreateParticle(world, 1, 4, worldPos.x, worldPos.y, 2.5f, 0.5f, 0.1f, sf::Color::Cyan); // water
-        fluid.CreateParticle(world, 1, 4, worldPos.x, worldPos.y, 2.5f, 0.f, 0.1f, sf::Color::Cyan); // water
+        fluid.CreateParticle(world, 1, 4, worldPos.x, worldPos.y, 2.5f, 0.f, 0.1f, sf::Color::Cyan);
     }
-    //std::cout << worldPos.x << " " << worldPos.y << std::endl;
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num4)) {
         particleCount++;
-        //fluid.CreateParticle(world, -0.1, 4, worldPos.x, worldPos.y, 1.0f, 0.f, 0.1f);// smoke
-        fluid.CreateParticle(world, 1, 3, worldPos.x, worldPos.y, 1.5f, 0.f, 0.1f, sf::Color::Red);// water
+        fluid.CreateParticle(world, 1, 3, worldPos.x, worldPos.y, 1.5f, 0.f, 0.1f, sf::Color::Red);
     }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num3)) {
         createCircle(worldPos.x, worldPos.y, 0.5, 0.25, 0.1, 5);
     }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num2)) {
         createSquare(worldPos.x, worldPos.y, 0.1, 0.3, 0.1, 50);
     }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Num1)) {
         createSquare(worldPos.x, worldPos.y, 0.5, 0.3, 0.1, 5);
     }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) {
         for (auto& [bodyId, shape] : squares)
             b2DestroyBody(bodyId);
@@ -536,6 +621,7 @@ void Game::KeyLogic() {
         particleCount = 0;
         std::cout << "All deleted." << std::endl;
     }
+
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
         selection.isSelecting = true;
         selection.startPos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
@@ -588,9 +674,111 @@ void Game::KeyLogic() {
     }
 }
 
-// ================== ªÊ÷∆UI ==================
+void Game::ImguiMainMenuBar() {
+
+    if (ImGui::BeginMainMenuBar()) {
+
+        if (ImGui::BeginMenu("File")) {
+            ImGui::Button("aaa");
+        ImGui::EndMenu();}
+
+        if (ImGui::BeginMenu("Edit")) {
+            ImGui::Button("aaa");
+        ImGui::EndMenu();}
+
+    }ImGui::EndMainMenuBar();
+}
+
+void Game::ImguiConsoleInputBox(float PADX, float PADY) {
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImVec2 work_pos = viewport->WorkPos;
+    ImVec2 work_size = viewport->WorkSize;
+    ImVec2 window_pos, window_pos_pivot;
+    window_pos.x = (work_pos.x + PADX);
+    window_pos.y = (work_pos.y + PADY);
+    window_pos_pivot.x = 0.0f;
+    window_pos_pivot.y = 0.0f;
+    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
+    window_flags |= ImGuiWindowFlags_NoMove;
+
+    if (ImGui::Begin("##user command", nullptr , window_flags)) {
+
+        char inputBuffer[1024] = "";
+        if (ImGui::InputText("Command", inputBuffer, sizeof(inputBuffer))) {
+        }
+        else {
+            if (userCommend != std::string(inputBuffer)) {
+                DEBUG("User command: %s", userCommend.c_str());
+            }
+        }
+        userCommend = std::string(inputBuffer);
+
+    ImGui::End();}
+
+}
+
+void Game::ImguiSpawnBrowser() {
+    if (ImGui::Begin("Spawnable Objects Browser")) {
+        if (ImGui::InputText("Search", spawnBrowser.searchBuffer, sizeof(spawnBrowser.searchBuffer))) {
+            spawnBrowser.search = std::string(spawnBrowser.searchBuffer);
+        }
+        ImGui::NewLine();
+        ImGui::Separator();
+
+        ImGui::Text("Objects :");
+        ImGui::NewLine();
+
+        ImGui::BeginGroup();
+
+        float total_width = ImGui::GetContentRegionAvail().x;
+        float button_width = spawnBrowser.iconSize + ImGui::GetStyle().ItemSpacing.x * 2;
+        int buttons_per_row = total_width / button_width;
+
+        if (buttons_per_row == 0) {
+            buttons_per_row = 1; 
+        }
+
+        int index = 0;
+        for (auto& obj : spawnBrowser.objects) {
+            if (obj.name.find( spawnBrowser.search) == std::string::npos) continue;
+            if (ImGui::ImageButton((obj.name + std::to_string(index)).c_str(), obj.icon, { spawnBrowser.iconSize, spawnBrowser.iconSize }, renderB2::DefaultColors::Button)) {
+
+            }
+
+            if (ImGui::IsItemHovered()) {
+                if (ImGui::BeginItemTooltip()) {
+
+                    ImGui::Text(obj.name.c_str());
+                    ImGui::Separator();
+                    ImGui::TextWrapped(obj.describe.c_str());
+
+                ImGui::EndTooltip();}
+            }
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+                INFO("left");
+            }
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                INFO("right");
+            }
+
+            if ((index + 1) % buttons_per_row != 0 && (index + 1) < spawnBrowser.objects.size()) {
+                ImGui::SameLine();
+            }
+            index++;
+        }
+
+        ImGui::EndGroup();
+
+    }ImGui::End();
+}
+
 void Game::RenderUi() {
-    {//◊Û±ﬂui
+    {//Â∑¶Ëæπui
         sf::RectangleShape leftUIshape({ 350.f - 8.f,  (float)height - 225.f });
         leftUIshape.setFillColor(sf::Color::Transparent);
         renderB2::MyUIObject* leftUI = new renderB2::MyUIObject(&leftUIshape, sf::Vector2f(8.f, 0.f + 200.f));
@@ -698,8 +886,8 @@ void Game::RenderUi() {
         //}
         leftUI->draw(&window);
     }
-    {//∂•…œµƒui
-        {//±ÍÃ‚
+    {//È°∂‰∏äÁöÑui
+        {//Ê†áÈ¢ò
             float titleWidth = 1000.f;
             float titleHeight = 175.f;
             sf::RectangleShape* bg = new sf::RectangleShape({ titleWidth, titleHeight });
@@ -730,7 +918,7 @@ void Game::RenderUi() {
             titleUI->addChild(textUI);
             titleUI->draw(&window);
         }
-        {//”“±ﬂµƒui
+        {//Âè≥ËæπÁöÑui
             sf::RectangleShape rightUIshape({ 350.f - 8.f,  (float)height - 225.f });
             rightUIshape.setFillColor(sf::Color::Transparent);
             renderB2::MyUIObject* rightUI = new renderB2::MyUIObject(&rightUIshape, sf::Vector2f(8.f + mousePos.x, 0.f + 200.f + mousePos.y));
@@ -804,7 +992,6 @@ void Game::RenderUi() {
     }
 }
 
-// ================== π§æﬂ∫Ø ˝ ==================
 bool Game::QueryCallback(b2ShapeId shapeId, void* context) {
     QueryContext* queryContext = static_cast<QueryContext*>(context);
     b2BodyId bodyId = b2Shape_GetBody(shapeId);

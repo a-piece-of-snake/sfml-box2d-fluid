@@ -27,6 +27,14 @@ inline void logMessage(const char* color, const char* level,
     }
 }
 
+inline void setConsoleTitle(const std::string& title) {
+    #ifdef _WIN32
+        SetConsoleTitleA(title.c_str());
+    #else
+        std::cout << "\033]0;" << title << "\007";
+    #endif
+}
+
 #define INFO(fmt, ...)      logMessage(WHITE,  "INFO",    __FILE__, __LINE__, fmt, false, ##__VA_ARGS__)
 #define DEBUG(fmt, ...)     logMessage(GRAY,   "DEBUG",   __FILE__, __LINE__, fmt, false, ##__VA_ARGS__)
 #define WARN(fmt, ...)      logMessage(YELLOW, "WARN",    __FILE__, __LINE__, fmt, true,  ##__VA_ARGS__)

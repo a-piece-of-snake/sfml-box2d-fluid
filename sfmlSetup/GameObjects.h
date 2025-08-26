@@ -3,18 +3,24 @@
 #include <vector>
 #include <cfloat>
 #include <algorithm>
-#include <box2d/box2d.h>
-#include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/System.hpp>
+#include <xmmintrin.h>
 #include <optional> 
 #include <cstdlib>
 #include <cmath>
 #include <mutex>
+#include <omp.h>
+
+#include <SFML/Graphics.hpp>
+#include <SFML/Window.hpp>
+#include <SFML/System.hpp>
+
+#include <box2d/box2d.h>
 #include <box2d/collision.h>
 #include <box2d/math_functions.h>
-#include "GameObjects.h"
+
+#include "ThreadPool.h"
 #include "MathUtils.h"
+
 namespace GameObjects
 {
     //const float G = 6.6743f;
@@ -27,6 +33,35 @@ namespace GameObjects
 		float timeStep;
 		int subStep;
     };
+
+    struct SpawnableObject {
+        std::string name;
+        std::string type;
+        std::string describe;
+        sf::Texture icon;
+		unsigned int ID;
+        std::function<bool(b2Vec2 pos)> onSpawned;
+        bool spawn(b2Vec2 pos);
+    };
+
+    struct SpawnableObjectBrowser {
+        std::vector<SpawnableObject> objects;
+		float iconSize = 50.f;
+        
+		char searchBuffer[1024];
+
+        std::string search;
+
+        void addObject(SpawnableObject obj) {
+            objects.emplace_back(std::move(obj));
+		}
+
+        void clearObjects() {
+            objects.clear();
+        }
+
+    };
+
 
     struct Particle {
         int index;

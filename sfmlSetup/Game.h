@@ -20,6 +20,12 @@
 #include <SFML/System.hpp>
 #include <SFML/Audio.hpp>
 
+#ifdef _WIN32
+    #include <windows.h>
+    #include <dwmapi.h>
+#endif
+
+#include "ResourceLoader.h"
 #include "renderBox2d.h"
 #include "GameObjects.h"
 #include "MathUtils.h"
@@ -46,10 +52,14 @@ private:
     sf::View worldView;
     sf::View uiView;
 
+    // 资源
+	Resourses resources;
+
     // 输入相关
     sf::Vector2f mousePos;
     sf::Vector2f lastmousePos;
     b2Vec2 worldPos = { 0,0 };
+    std::string userCommend;
 
     // 时间/FPS
     sf::Clock msclock;
@@ -71,10 +81,15 @@ private:
     std::vector<b2BodyId> mapBodyId;
     bool Drag = false;
     b2ExplosionDef Dragdef = b2DefaultExplosionDef();
+
     // 相机
     float camX = 0.f, camY = 0.f;
 
+    // ImGui
     ImGui::FileBrowser fileDialog;
+	bool showConsole = false;
+    float consoleAnimation = -40.f;
+	GameObjects::SpawnableObjectBrowser spawnBrowser;
 
     // 纹理
     sf::Texture BackGroundT;
@@ -111,8 +126,10 @@ private:
     void createCircle(float x, float y, float density, float friction, float restitution, float size);
 
     // 循环分解
-	void ImGuiInit();
+	void InitWindow();
+	void InitImGui();
     void InitScene();
+	void LoadResources();
     void Update();
     void Render();
     void ImGuiRelated();
@@ -122,4 +139,8 @@ private:
     void DrawWorld();
     void RenderUi();
     void RenderSKeyOverlay();
+
+    void ImguiMainMenuBar();
+    void ImguiConsoleInputBox(float PADX, float PADY);
+    void ImguiSpawnBrowser();
 };

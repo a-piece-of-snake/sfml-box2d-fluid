@@ -99,7 +99,10 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="ColorfulLog.h">
-      <Filter>Header Files</Filter>
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceLoader.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -1,15 +1,19 @@
 ﻿#pragma once
+
 #include <iostream>
 #include <vector>
 #include <cfloat>
 #include <algorithm>
+#include <optional> 
+
 #include <box2d/box2d.h>
+
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <SFML/System.hpp>
 #include <SFML/Audio.hpp>
+
 #include "GameObjects.h"
-#include <optional> 
 
 namespace renderB2
 {

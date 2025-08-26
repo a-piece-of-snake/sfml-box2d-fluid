@@ -1,28 +1,15 @@
-#include <iostream>
-#include <vector>
-#include <xmmintrin.h>
-#include <cfloat>
-#include <algorithm>
-#include <box2d/box2d.h>
-#include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
-#include <SFML/System.hpp>
-#include <functional>
-#include <thread>
-#include <optional> 
-#include <cstdlib>
-#include <cmath>
-#include <mutex>
-#include <future>
-#include <box2d/collision.h>
-#include <box2d/math_functions.h>
 #include "GameObjects.h"
-#include "MathUtils.h"
-#include "ThreadPool.h"
-#include<omp.h>
 
 namespace GameObjects
 {
+
+    bool SpawnableObject::spawn(b2Vec2 pos) {
+        if (onSpawned) {
+            return onSpawned(pos);
+        }
+        return false;
+	}
+
     int ParticleGroup::getHash2D(std::pair<int, int> gridPos) {
         return hashMapSize / 2 + ((gridPos.first * prime1) ^ (gridPos.second * prime2)) % (hashMapSize / 2);
     }
