@@ -26,6 +26,8 @@ namespace GameObjects
     //const float G = 6.6743f;
     struct World
     {
+		b2Vec2 gravity = { -2.5f, 0.0f };
+		float contactHertz = 60.f;
         b2WorldId worldId;
         sf::Clock clock;
         b2JointId mouseJointId = b2_nullJointId;
@@ -40,8 +42,8 @@ namespace GameObjects
         std::string describe;
         sf::Texture icon;
 		unsigned int ID;
-        std::function<bool(b2Vec2 pos)> onSpawned;
-        bool spawn(b2Vec2 pos);
+        std::function<bool(b2Vec2 pos, float size, float friction, float restitution)> onSpawned;
+        bool spawn(b2Vec2 pos, float size, float friction, float restitution);
     };
 
     struct SpawnableObjectBrowser {
@@ -95,7 +97,7 @@ namespace GameObjects
         float FORCE_ADHESION = 0.f;
         float SHEAR_VISCOSITY = 20.f;
         float VISCOSITY = 8.f; 
-        float VISCOSITY_LEAVE = 0.8f;  
+        float VISCOSITY_LEAVE = 0.8f;
     };
     
     struct ParticleGroup {
@@ -104,8 +106,8 @@ namespace GameObjects
         GameObjects::ParticleConfig Config;
         b2DynamicTree dynamicTree;
         std::vector<std::vector<Particle*>> gridBuckets;
-        int gridSizeX = 5000; 
-        int gridSizeY = 5000;
+        int gridSizeX = 2500; 
+        int gridSizeY = 2500;
         float cellSize = 10.0f;
 
         int getGridIndex(int x, int y) const {
@@ -126,7 +128,7 @@ namespace GameObjects
         int getHash2D(std::pair<int, int> gridPos);
         std::pair<int, int> getGridPos(GameObjects::Particle& pariticle);
         void UpdateData(GameObjects::World world);
-        void CreateParticle(GameObjects::World world, float gravityScale, float radius, float x, float y, float density, float friction, float restitution,sf::Color color);
+        void CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color);
         void DestroyParticle(GameObjects::World world, GameObjects::Particle* particle);
         float GetForce(float dst, float radius);
         void freeze();

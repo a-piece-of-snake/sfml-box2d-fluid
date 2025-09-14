@@ -135,7 +135,7 @@ static const ImU64          IM_U64_MAX = (2ULL * 9223372036854775807LL + 1);
 
 // For InputTextEx()
 static bool     InputTextFilterCharacter(ImGuiContext* ctx, unsigned int* p_char, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, void* user_data, bool input_source_is_clipboard = false);
-static int      InputTextCalcTextLenAndLineCount(const char* text_begin, const char** out_text_end);
+static int      InputTextCalcTextLenAndLineCount(ImGuiContext* ctx, const char* text_begin, const char** out_text_end);
 static ImVec2   InputTextCalcTextSize(ImGuiContext* ctx, const char* text_begin, const char* text_end, const char** remaining = NULL, ImVec2* out_offset = NULL, bool stop_on_new_line = false);
 
 //-------------------------------------------------------------------------
@@ -560,7 +560,7 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
         flags |= (item_flags & ImGuiItemFlags_ButtonRepeat) ? ImGuiButtonFlags_PressedOnClick : ImGuiButtonFlags_PressedOnDefault_;
 
     ImGuiWindow* backup_hovered_window = g.HoveredWindow;
-    const bool flatten_hovered_children = (flags & ImGuiButtonFlags_FlattenChildren) && g.HoveredWindow && g.HoveredWindow->RootWindow == window->RootWindow;
+    const bool flatten_hovered_children = (flags & ImGuiButtonFlags_FlattenChildren) && g.HoveredWindow && g.HoveredWindow->RootWindowDockTree == window->RootWindowDockTree;
     if (flatten_hovered_children)
         g.HoveredWindow = window;
 
@@ -920,7 +920,8 @@ bool ImGui::CloseButton(ImGuiID id, const ImVec2& pos)
     return pressed;
 }
 
-bool ImGui::CollapseButton(ImGuiID id, const ImVec2& pos)
+// The Collapse button also functions as a Dock Menu button.
+bool ImGui::CollapseButton(ImGuiID id, const ImVec2& pos, ImGuiDockNode* dock_node)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -933,16 +934,21 @@ bool ImGui::CollapseButton(ImGuiID id, const ImVec2& pos)
         return pressed;
 
     // Render
+    //bool is_dock_menu = (window->DockNodeAsHost && !window->Collapsed);
     ImU32 bg_col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     ImU32 text_col = GetColorU32(ImGuiCol_Text);
     if (hovered || held)
         window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
     RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
-    RenderArrow(window->DrawList, bb.Min, text_col, window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down, 1.0f);
+
+    if (dock_node)
+        RenderArrowDockMenu(window->DrawList, bb.Min, g.FontSize, text_col);
+    else
+        RenderArrow(window->DrawList, bb.Min, text_col, window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down, 1.0f);
 
     // Switch to moving the window after mouse is moved beyond the initial drag threshold
     if (IsItemActive() && IsMouseDragging(0))
-        StartMouseMovingWindow(window);
+        StartMouseMovingWindowOrNode(window, dock_node, true); // Undock from window/collapse menu button
 
     return pressed;
 }
@@ -1709,7 +1715,7 @@ void ImGui::SeparatorTextEx(ImGuiID id, const char* label, const char* label_end
     const float separator_thickness = style.SeparatorTextBorderSize;
     const ImVec2 min_size(label_size.x + extra_w + padding.x * 2.0f, ImMax(label_size.y + padding.y * 2.0f, separator_thickness));
     const ImRect bb(pos, ImVec2(window->WorkRect.Max.x, pos.y + min_size.y));
-    const float text_baseline_y = ImTrunc((bb.GetHeight() - label_size.y) * style.SeparatorTextAlign.y + 0.99999f); //ImMax(padding.y, ImFloor((style.SeparatorTextSize - label_size.y) * 0.5f));
+    const float text_baseline_y = ImTrunc((bb.GetHeight() - label_size.y) * style.SeparatorTextAlign.y + 0.99999f); //ImMax(padding.y, ImTrunc((style.SeparatorTextSize - label_size.y) * 0.5f));
     ItemSize(min_size, text_baseline_y);
     if (!ItemAdd(bb, id))
         return;
@@ -3941,20 +3947,22 @@ bool ImGui::InputTextWithHint(const char* label, const char* hint, char* buf, si
 }
 
 // This is only used in the path where the multiline widget is inactive.
-static int InputTextCalcTextLenAndLineCount(const char* text_begin, const char** out_text_end)
+static int InputTextCalcTextLenAndLineCount(ImGuiContext*, const char* text_begin, const char** out_text_end)
 {
     int line_count = 0;
     const char* s = text_begin;
-    while (true)
     {
-        const char* s_eol = strchr(s, '\n');
-        line_count++;
-        if (s_eol == NULL)
+        while (true)
         {
-            s = s + ImStrlen(s);
-            break;
+            const char* s_eol = strchr(s, '\n');
+            line_count++;
+            if (s_eol == NULL)
+            {
+                s = s + ImStrlen(s);
+                break;
+            }
+            s = s_eol + 1;
         }
-        s = s_eol + 1;
     }
     *out_text_end = s;
     return line_count;
@@ -4653,7 +4661,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         // Take a copy of the initial buffer value.
         // From the moment we focused we are normally ignoring the content of 'buf' (unless we are in read-only mode)
         const int buf_len = (int)ImStrlen(buf);
-        IM_ASSERT(buf_len + 1 <= buf_size && "Is your input buffer properly zero-terminated?");
+        IM_ASSERT(((buf_len + 1 <= buf_size) || (buf_len == 0 && buf_size == 0)) && "Is your input buffer properly zero-terminated?");
         state->TextToRevertTo.resize(buf_len + 1);    // UTF-8. we use +1 to make sure that .Data is always pointing to at least an empty string.
         memcpy(state->TextToRevertTo.Data, buf, buf_len + 1);
 
@@ -4964,7 +4972,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         {
             if (flags & ImGuiInputTextFlags_EscapeClearsAll)
             {
-                if (buf[0] != 0)
+                if (state->TextA.Data[0] != 0)
                 {
                     revert_edit = true;
                 }
@@ -5056,14 +5064,14 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             if (flags & ImGuiInputTextFlags_EscapeClearsAll)
             {
                 // Clear input
-                IM_ASSERT(buf[0] != 0);
+                IM_ASSERT(state->TextA.Data[0] != 0);
                 apply_new_text = "";
                 apply_new_text_length = 0;
                 value_changed = true;
                 IMSTB_TEXTEDIT_CHARTYPE empty_string;
                 stb_textedit_replace(state, state->Stb, &empty_string, 0);
             }
-            else if (strcmp(buf, state->TextToRevertTo.Data) != 0)
+            else if (strcmp(state->TextA.Data, state->TextToRevertTo.Data) != 0)
             {
                 apply_new_text = state->TextToRevertTo.Data;
                 apply_new_text_length = state->TextToRevertTo.Size - 1;
@@ -5230,7 +5238,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         RenderFrame(frame_bb.Min, frame_bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
     }
 
-    const ImVec4 clip_rect(frame_bb.Min.x, frame_bb.Min.y, frame_bb.Min.x + inner_size.x, frame_bb.Min.y + inner_size.y); // Not using frame_bb.Max because we have adjusted size
+    const ImRect clip_rect(frame_bb.Min.x, frame_bb.Min.y, frame_bb.Min.x + inner_size.x, frame_bb.Min.y + inner_size.y); // Not using frame_bb.Max because we have adjusted size
     ImVec2 draw_pos = is_multiline ? draw_window->DC.CursorPos : frame_bb.Min + style.FramePadding;
     ImVec2 text_size(0.0f, 0.0f);
 
@@ -5259,7 +5267,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     }
 
     // Render text. We currently only render selection when the widget is active or while scrolling.
-    // FIXME: We could remove the '&& render_cursor' to keep rendering selection when inactive.
+    // FIXME: This is one of the messiest piece of the whole codebase.
     if (render_cursor || render_selection)
     {
         IM_ASSERT(state != NULL);
@@ -5285,14 +5293,17 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             const char* selmin_ptr = render_selection ? text_begin + ImMin(state->Stb->select_start, state->Stb->select_end) : NULL;
 
             // Count lines and find line number for cursor and selection ends
+            // FIXME: Switch to zero-based index to reduce confusion.
             int line_count = 1;
             if (is_multiline)
             {
-                for (const char* s = text_begin; (s = (const char*)ImMemchr(s, '\n', (size_t)(text_end - s))) != NULL; s++)
                 {
-                    if (cursor_line_no == -1 && s >= cursor_ptr) { cursor_line_no = line_count; }
-                    if (selmin_line_no == -1 && s >= selmin_ptr) { selmin_line_no = line_count; }
-                    line_count++;
+                    for (const char* s = text_begin; (s = (const char*)ImMemchr(s, '\n', (size_t)(text_end - s))) != NULL; s++)
+                    {
+                        if (cursor_line_no == -1 && s >= cursor_ptr) { cursor_line_no = line_count; }
+                        if (selmin_line_no == -1 && s >= selmin_ptr) { selmin_line_no = line_count; }
+                        line_count++;
+                    }
                 }
             }
             if (cursor_line_no == -1)
@@ -5362,9 +5373,9 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             ImVec2 rect_pos = draw_pos + select_start_offset - draw_scroll;
             for (const char* p = text_selected_begin; p < text_selected_end; )
             {
-                if (rect_pos.y > clip_rect.w + g.FontSize)
+                if (rect_pos.y > clip_rect.Max.y + g.FontSize)
                     break;
-                if (rect_pos.y < clip_rect.y)
+                if (rect_pos.y < clip_rect.Min.y)
                 {
                     p = (const char*)ImMemchr((void*)p, '\n', text_selected_end - p);
                     p = p ? p + 1 : text_selected_end;
@@ -5372,7 +5383,8 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                 else
                 {
                     ImVec2 rect_size = InputTextCalcTextSize(&g, p, text_selected_end, &p, NULL, true);
-                    if (rect_size.x <= 0.0f) rect_size.x = IM_TRUNC(g.FontBaked->GetCharAdvance((ImWchar)' ') * 0.50f); // So we can see selected empty lines
+                    if (rect_size.x <= 0.0f)
+                        rect_size.x = IM_TRUNC(g.FontBaked->GetCharAdvance((ImWchar)' ') * 0.50f); // So we can see selected empty lines
                     ImRect rect(rect_pos + ImVec2(0.0f, bg_offy_up - g.FontSize), rect_pos + ImVec2(rect_size.x, bg_offy_dn));
                     rect.ClipWith(clip_rect);
                     if (rect.Overlaps(clip_rect))
@@ -5388,7 +5400,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         if (is_multiline || (buf_display_end - buf_display) < buf_display_max_length)
         {
             ImU32 col = GetColorU32(is_displaying_hint ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-            draw_window->DrawList->AddText(g.Font, g.FontSize, draw_pos - draw_scroll, col, buf_display, buf_display_end, 0.0f, is_multiline ? NULL : &clip_rect);
+            draw_window->DrawList->AddText(g.Font, g.FontSize, draw_pos - draw_scroll, col, buf_display, buf_display_end, 0.0f, is_multiline ? NULL : &clip_rect.AsVec4());
         }
 
         // Draw blinking cursor
@@ -5419,7 +5431,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     {
         // Render text only (no selection, no cursor)
         if (is_multiline)
-            text_size = ImVec2(inner_size.x, InputTextCalcTextLenAndLineCount(buf_display, &buf_display_end) * g.FontSize); // We don't need width
+            text_size = ImVec2(inner_size.x, InputTextCalcTextLenAndLineCount(&g, buf_display, &buf_display_end) * g.FontSize); // We don't need width
         else if (!is_displaying_hint && g.ActiveId == id)
             buf_display_end = buf_display + state->TextLen;
         else if (!is_displaying_hint)
@@ -5433,7 +5445,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
 
             const ImVec2 draw_scroll = /*state ? ImVec2(state->Scroll.x, 0.0f) :*/ ImVec2(0.0f, 0.0f); // Preserve scroll when inactive?
             ImU32 col = GetColorU32(is_displaying_hint ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-            draw_window->DrawList->AddText(g.Font, g.FontSize, draw_pos - draw_scroll, col, buf_display, buf_display_end, 0.0f, is_multiline ? NULL : &clip_rect);
+            draw_window->DrawList->AddText(g.Font, g.FontSize, draw_pos - draw_scroll, col, buf_display, buf_display_end, 0.0f, is_multiline ? NULL : &clip_rect.AsVec4());
         }
     }
 
@@ -8829,9 +8841,10 @@ bool ImGui::BeginMenuBar()
 
     // We don't clip with current window clipping rectangle as it is already set to the area below. However we clip with window full rect.
     // We remove 1 worth of rounding to Max.x to that text in long menus and small windows don't tend to display over the lower-right rounded area, which looks particularly glitchy.
-    const float border_top = ImMax(window->WindowBorderSize * 0.5f - window->TitleBarHeight, 0.0f);
+    const float border_top = ImMax(IM_ROUND(window->WindowBorderSize * 0.5f - window->TitleBarHeight), 0.0f);
+    const float border_half = IM_ROUND(window->WindowBorderSize * 0.5f);
     ImRect bar_rect = window->MenuBarRect();
-    ImRect clip_rect(IM_ROUND(bar_rect.Min.x + window->WindowBorderSize * 0.5f), IM_ROUND(bar_rect.Min.y + border_top), IM_ROUND(ImMax(bar_rect.Min.x, bar_rect.Max.x - ImMax(window->WindowRounding, window->WindowBorderSize * 0.5f))), IM_ROUND(bar_rect.Max.y));
+    ImRect clip_rect(ImFloor(bar_rect.Min.x + border_half), ImFloor(bar_rect.Min.y + border_top), ImFloor(ImMax(bar_rect.Min.x, bar_rect.Max.x - ImMax(window->WindowRounding, border_half))), ImFloor(bar_rect.Max.y));
     clip_rect.ClipWith(window->OuterRectClipped);
     PushClipRect(clip_rect.Min, clip_rect.Max, false);
 
@@ -8908,10 +8921,10 @@ bool ImGui::BeginViewportSideBar(const char* name, ImGuiViewport* viewport_p, Im
     IM_ASSERT(dir != ImGuiDir_None);
 
     ImGuiWindow* bar_window = FindWindowByName(name);
+    ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)(viewport_p ? viewport_p : GetMainViewport());
     if (bar_window == NULL || bar_window->BeginCount == 0)
     {
         // Calculate and set window size/position
-        ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)(viewport_p ? viewport_p : GetMainViewport());
         ImRect avail_rect = viewport->GetBuildWorkRect();
         ImGuiAxis axis = (dir == ImGuiDir_Up || dir == ImGuiDir_Down) ? ImGuiAxis_Y : ImGuiAxis_X;
         ImVec2 pos = avail_rect.Min;
@@ -8929,7 +8942,8 @@ bool ImGui::BeginViewportSideBar(const char* name, ImGuiViewport* viewport_p, Im
             viewport->BuildWorkInsetMax[axis] += axis_size;
     }
 
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking;
+    SetNextWindowViewport(viewport->ID); // Enforce viewport so we don't create our own viewport when ImGuiConfigFlags_ViewportsNoMerge is set.
     PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0)); // Lift normal size constraint
     bool is_open = Begin(name, NULL, window_flags);
@@ -8942,6 +8956,9 @@ bool ImGui::BeginMainMenuBar()
 {
     ImGuiContext& g = *GImGui;
     ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)GetMainViewport();
+
+    // Notify of viewport change so GetFrameHeight() can be accurate in case of DPI change
+    SetCurrentViewport(NULL, viewport);
 
     // For the main menu bar, which cannot be moved, we honor g.Style.DisplaySafeAreaPadding to ensure text can be visible on a TV set.
     // FIXME: This could be generalized as an opt-in way to clamp window->DC.CursorStartPos to avoid SafeArea?
@@ -9004,7 +9021,7 @@ static bool IsRootOfOpenMenuSet()
     const ImGuiPopupData* upper_popup = &g.OpenPopupStack[g.BeginPopupStack.Size];
     if (window->DC.NavLayerCurrent != upper_popup->ParentNavLayer)
         return false;
-    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && ImGui::IsWindowChildOf(upper_popup->Window, window, true);
+    return upper_popup->Window && (upper_popup->Window->Flags & ImGuiWindowFlags_ChildMenu) && ImGui::IsWindowChildOf(upper_popup->Window, window, true, false);
 }
 
 bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
@@ -9346,8 +9363,10 @@ bool ImGui::MenuItem(const char* label, const char* shortcut, bool* p_selected, 
 // - TabBarCalcMaxTabWidth() [Internal]
 // - TabBarFindTabById() [Internal]
 // - TabBarFindTabByOrder() [Internal]
+// - TabBarFindMostRecentlySelectedTabForActiveWindow() [Internal]
 // - TabBarGetCurrentTab() [Internal]
 // - TabBarGetTabName() [Internal]
+// - TabBarAddTab() [Internal]
 // - TabBarRemoveTab() [Internal]
 // - TabBarCloseTab() [Internal]
 // - TabBarScrollClamp() [Internal]
@@ -9470,7 +9489,8 @@ bool    ImGui::BeginTabBarEx(ImGuiTabBar* tab_bar, const ImRect& tab_bar_bb, ImG
 
     // Ensure correct ordering when toggling ImGuiTabBarFlags_Reorderable flag, or when a new tab was added while being not reorderable
     if ((flags & ImGuiTabBarFlags_Reorderable) != (tab_bar->Flags & ImGuiTabBarFlags_Reorderable) || (tab_bar->TabsAddedNew && !(flags & ImGuiTabBarFlags_Reorderable)))
-        ImQsort(tab_bar->Tabs.Data, tab_bar->Tabs.Size, sizeof(ImGuiTabItem), TabItemComparerByBeginOrder);
+        if ((flags & ImGuiTabBarFlags_DockNode) == 0) // FIXME: TabBar with DockNode can now be hybrid
+            ImQsort(tab_bar->Tabs.Data, tab_bar->Tabs.Size, sizeof(ImGuiTabItem), TabItemComparerByBeginOrder);
     tab_bar->TabsAddedNew = false;
 
     // Flags
@@ -9772,6 +9792,10 @@ static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
     tab_bar->VisibleTabId = tab_bar->SelectedTabId;
     tab_bar->VisibleTabWasSubmitted = false;
 
+    // CTRL+TAB can override visible tab temporarily
+    if (g.NavWindowingTarget != NULL && g.NavWindowingTarget->DockNode && g.NavWindowingTarget->DockNode->TabBar == tab_bar)
+        tab_bar->VisibleTabId = scroll_to_tab_id = g.NavWindowingTarget->TabId;
+
     // Apply request requests
     if (scroll_to_tab_id != 0)
         TabBarScrollToTab(tab_bar, scroll_to_tab_id, sections);
@@ -9817,11 +9841,11 @@ static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
 // Dockable windows uses Name/ID in the global namespace. Non-dockable items use the ID stack.
 static ImU32   ImGui::TabBarCalcTabID(ImGuiTabBar* tab_bar, const char* label, ImGuiWindow* docked_window)
 {
-    IM_ASSERT(docked_window == NULL); // master branch only
-    IM_UNUSED(docked_window);
-    if (tab_bar->Flags & ImGuiTabBarFlags_DockNode)
+    if (docked_window != NULL)
     {
-        ImGuiID id = ImHashStr(label);
+        IM_UNUSED(tab_bar);
+        IM_ASSERT(tab_bar->Flags & ImGuiTabBarFlags_DockNode);
+        ImGuiID id = docked_window->TabId;
         KeepAliveID(id);
         return id;
     }
@@ -9855,6 +9879,20 @@ ImGuiTabItem* ImGui::TabBarFindTabByOrder(ImGuiTabBar* tab_bar, int order)
     return &tab_bar->Tabs[order];
 }
 
+// FIXME: See references to #2304 in TODO.txt
+ImGuiTabItem* ImGui::TabBarFindMostRecentlySelectedTabForActiveWindow(ImGuiTabBar* tab_bar)
+{
+    ImGuiTabItem* most_recently_selected_tab = NULL;
+    for (int tab_n = 0; tab_n < tab_bar->Tabs.Size; tab_n++)
+    {
+        ImGuiTabItem* tab = &tab_bar->Tabs[tab_n];
+        if (most_recently_selected_tab == NULL || most_recently_selected_tab->LastFrameSelected < tab->LastFrameSelected)
+            if (tab->Window && tab->Window->WasActive)
+                most_recently_selected_tab = tab;
+    }
+    return most_recently_selected_tab;
+}
+
 ImGuiTabItem* ImGui::TabBarGetCurrentTab(ImGuiTabBar* tab_bar)
 {
     if (tab_bar->LastTabItemIdx < 0 || tab_bar->LastTabItemIdx >= tab_bar->Tabs.Size)
@@ -9864,10 +9902,33 @@ ImGuiTabItem* ImGui::TabBarGetCurrentTab(ImGuiTabBar* tab_bar)
 
 const char* ImGui::TabBarGetTabName(ImGuiTabBar* tab_bar, ImGuiTabItem* tab)
 {
+    if (tab->Window)
+        return tab->Window->Name;
     if (tab->NameOffset == -1)
         return "N/A";
     IM_ASSERT(tab->NameOffset < tab_bar->TabsNames.Buf.Size);
     return tab_bar->TabsNames.Buf.Data + tab->NameOffset;
+}
+
+// The purpose of this call is to register tab in advance so we can control their order at the time they appear.
+// Otherwise calling this is unnecessary as tabs are appending as needed by the BeginTabItem() function.
+void ImGui::TabBarAddTab(ImGuiTabBar* tab_bar, ImGuiTabItemFlags tab_flags, ImGuiWindow* window)
+{
+    ImGuiContext& g = *GImGui;
+    IM_ASSERT(TabBarFindTabByID(tab_bar, window->TabId) == NULL);
+    IM_ASSERT(g.CurrentTabBar != tab_bar);  // Can't work while the tab bar is active as our tab doesn't have an X offset yet, in theory we could/should test something like (tab_bar->CurrFrameVisible < g.FrameCount) but we'd need to solve why triggers the commented early-out assert in BeginTabBarEx() (probably dock node going from implicit to explicit in same frame)
+
+    if (!window->HasCloseButton)
+        tab_flags |= ImGuiTabItemFlags_NoCloseButton;       // Set _NoCloseButton immediately because it will be used for first-frame width calculation.
+
+    ImGuiTabItem new_tab;
+    new_tab.ID = window->TabId;
+    new_tab.Flags = tab_flags;
+    new_tab.LastFrameVisible = tab_bar->CurrFrameVisible;   // Required so BeginTabBar() doesn't ditch the tab
+    if (new_tab.LastFrameVisible == -1)
+        new_tab.LastFrameVisible = g.FrameCount - 1;
+    new_tab.Window = window;                                // Required so tab bar layout can compute the tab width before tab submission
+    tab_bar->Tabs.push_back(new_tab);
 }
 
 // The *TabId fields are already set by the docking system _before_ the actual TabItem was created, so we clear them regardless.
@@ -10286,11 +10347,14 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     const bool is_tab_button = (flags & ImGuiTabItemFlags_Button) != 0;
     tab->LastFrameVisible = g.FrameCount;
     tab->Flags = flags;
+    tab->Window = docked_window;
 
     // Append name _WITH_ the zero-terminator
+    // (regular tabs are permitted in a DockNode tab bar, but window tabs not permitted in a non-DockNode tab bar)
     if (docked_window != NULL)
     {
-        IM_ASSERT(docked_window == NULL); // master branch only
+        IM_ASSERT(tab_bar->Flags & ImGuiTabBarFlags_DockNode);
+        tab->NameOffset = -1;
     }
     else
     {
@@ -10315,7 +10379,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
         tab_bar->VisibleTabWasSubmitted = true;
 
     // On the very first frame of a tab bar we let first tab contents be visible to minimize appearing glitches
-    if (!tab_contents_visible && tab_bar->SelectedTabId == 0 && tab_bar_appearing)
+    if (!tab_contents_visible && tab_bar->SelectedTabId == 0 && tab_bar_appearing && docked_window == NULL)
         if (tab_bar->Tabs.Size == 1 && !(tab_bar->Flags & ImGuiTabBarFlags_AutoSelectNewTabs))
             tab_contents_visible = true;
 
@@ -10363,9 +10427,8 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     }
 
     // Click to Select a tab
-    // Allow the close button to overlap
     ImGuiButtonFlags button_flags = ((is_tab_button ? ImGuiButtonFlags_PressedOnClickRelease : ImGuiButtonFlags_PressedOnClick) | ImGuiButtonFlags_AllowOverlap);
-    if (g.DragDropActive)
+    if (g.DragDropActive && !g.DragDropPayload.IsDataType(IMGUI_PAYLOAD_TYPE_WINDOW)) // FIXME: May be an opt-in property of the payload to disable this
         button_flags |= ImGuiButtonFlags_PressedOnDragDropHold;
     bool hovered, held, pressed;
     if (flags & ImGuiTabItemFlags_Invisible)
@@ -10375,19 +10438,72 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     if (pressed && !is_tab_button)
         TabBarQueueFocus(tab_bar, tab);
 
-    // Drag and drop: re-order tabs
-    if (held && !tab_appearing && IsMouseDragging(0))
+    // Transfer active id window so the active id is not owned by the dock host (as StartMouseMovingWindow()
+    // will only do it on the drag). This allows FocusWindow() to be more conservative in how it clears active id.
+    if (held && docked_window && g.ActiveId == id && g.ActiveIdIsJustActivated)
+        g.ActiveIdWindow = docked_window;
+
+    // Drag and drop a single floating window node moves it
+    ImGuiDockNode* node = docked_window ? docked_window->DockNode : NULL;
+    const bool single_floating_window_node = node && node->IsFloatingNode() && (node->Windows.Size == 1);
+    if (held && single_floating_window_node && IsMouseDragging(0, 0.0f))
     {
-        if (!g.DragDropActive && (tab_bar->Flags & ImGuiTabBarFlags_Reorderable))
+        // Move
+        StartMouseMovingWindow(docked_window);
+    }
+    else if (held && !tab_appearing && IsMouseDragging(0))
+    {
+        // Drag and drop: re-order tabs
+        int drag_dir = 0;
+        float drag_distance_from_edge_x = 0.0f;
+        if (!g.DragDropActive && ((tab_bar->Flags & ImGuiTabBarFlags_Reorderable) || (docked_window != NULL)))
         {
             // While moving a tab it will jump on the other side of the mouse, so we also test for MouseDelta.x
             if (g.IO.MouseDelta.x < 0.0f && g.IO.MousePos.x < bb.Min.x)
             {
+                drag_dir = -1;
+                drag_distance_from_edge_x = bb.Min.x - g.IO.MousePos.x;
                 TabBarQueueReorderFromMousePos(tab_bar, tab, g.IO.MousePos);
             }
             else if (g.IO.MouseDelta.x > 0.0f && g.IO.MousePos.x > bb.Max.x)
             {
+                drag_dir = +1;
+                drag_distance_from_edge_x = g.IO.MousePos.x - bb.Max.x;
                 TabBarQueueReorderFromMousePos(tab_bar, tab, g.IO.MousePos);
+            }
+        }
+
+        // Extract a Dockable window out of it's tab bar
+        const bool can_undock = docked_window != NULL && !(docked_window->Flags & ImGuiWindowFlags_NoMove) && !(node->MergedFlags & ImGuiDockNodeFlags_NoUndocking);
+        if (can_undock)
+        {
+            // We use a variable threshold to distinguish dragging tabs within a tab bar and extracting them out of the tab bar
+            bool undocking_tab = (g.DragDropActive && g.DragDropPayload.SourceId == id);
+            if (!undocking_tab) //&& (!g.IO.ConfigDockingWithShift || g.IO.KeyShift)
+            {
+                float threshold_base = g.FontSize;
+                float threshold_x = (threshold_base * 2.2f);
+                float threshold_y = (threshold_base * 1.5f) + ImClamp((ImFabs(g.IO.MouseDragMaxDistanceAbs[0].x) - threshold_base * 2.0f) * 0.20f, 0.0f, threshold_base * 4.0f);
+                //GetForegroundDrawList()->AddRect(ImVec2(bb.Min.x - threshold_x, bb.Min.y - threshold_y), ImVec2(bb.Max.x + threshold_x, bb.Max.y + threshold_y), IM_COL32_WHITE); // [DEBUG]
+
+                float distance_from_edge_y = ImMax(bb.Min.y - g.IO.MousePos.y, g.IO.MousePos.y - bb.Max.y);
+                if (distance_from_edge_y >= threshold_y)
+                    undocking_tab = true;
+                if (drag_distance_from_edge_x > threshold_x)
+                    if ((drag_dir < 0 && TabBarGetTabOrder(tab_bar, tab) == 0) || (drag_dir > 0 && TabBarGetTabOrder(tab_bar, tab) == tab_bar->Tabs.Size - 1))
+                        undocking_tab = true;
+            }
+
+            if (undocking_tab)
+            {
+                // Undock
+                // FIXME: refactor to share more code with e.g. StartMouseMovingWindow
+                DockContextQueueUndockWindow(&g, docked_window);
+                g.MovingWindow = docked_window;
+                SetActiveID(g.MovingWindow->MoveId, g.MovingWindow);
+                g.ActiveIdClickOffset -= g.MovingWindow->Pos - bb.Min;
+                g.ActiveIdNoClearOnFocusLoss = true;
+                SetActiveIdUsingAllKeyboardKeys();
             }
         }
     }
@@ -10438,7 +10554,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
             flags |= ImGuiTabItemFlags_NoCloseWithMiddleMouseButton;
 
         // Render tab label, process close button
-        const ImGuiID close_button_id = p_open ? GetIDWithSeed("#CLOSE", NULL, id) : 0;
+        const ImGuiID close_button_id = p_open ? GetIDWithSeed("#CLOSE", NULL, docked_window ? docked_window->ID : id) : 0;
         bool just_closed;
         bool text_clipped;
         TabItemLabelAndCloseButton(display_draw_list, bb, tab_just_unsaved ? (flags & ~ImGuiTabItemFlags_UnsavedDocument) : flags, tab_bar->FramePadding, label, id, close_button_id, tab_contents_visible, &just_closed, &text_clipped);
@@ -10447,6 +10563,11 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
             *p_open = false;
             TabBarCloseTab(tab_bar, tab);
         }
+
+        // Forward Hovered state so IsItemHovered() after Begin() can work (even though we are technically hovering our parent)
+        // That state is copied to window->DockTabItemStatusFlags by our caller.
+        if (docked_window && (hovered || g.HoveredId == close_button_id))
+            g.LastItemData.StatusFlags |= ImGuiItemStatusFlags_HoveredWindow;
 
         // Tooltip
         // (Won't work over the close button because ItemOverlap systems messes up with HoveredIdTimer-> seems ok)
@@ -10483,6 +10604,16 @@ void    ImGui::SetTabItemClosed(const char* label)
         if (ImGuiTabItem* tab = TabBarFindTabByID(tab_bar, tab_id))
             tab->WantClose = true; // Will be processed by next call to TabBarLayout()
     }
+    else if (ImGuiWindow* window = FindWindowByName(label))
+    {
+        if (window->DockIsActive)
+            if (ImGuiDockNode* node = window->DockNode)
+            {
+                ImGuiID tab_id = TabBarCalcTabID(node->TabBar, label, window);
+                TabBarRemoveTab(node->TabBar, tab_id);
+                window->DockTabWantClose = true;
+            }
+    }
 }
 
 ImVec2 ImGui::TabItemCalcSize(const char* label, bool has_close_button_or_unsaved_marker)
@@ -10497,10 +10628,9 @@ ImVec2 ImGui::TabItemCalcSize(const char* label, bool has_close_button_or_unsave
     return ImVec2(ImMin(size.x, TabBarCalcMaxTabWidth()), size.y);
 }
 
-ImVec2 ImGui::TabItemCalcSize(ImGuiWindow*)
+ImVec2 ImGui::TabItemCalcSize(ImGuiWindow* window)
 {
-    IM_ASSERT(0); // This function exists to facilitate merge with 'docking' branch.
-    return ImVec2(0.0f, 0.0f);
+    return TabItemCalcSize(window->Name, window->HasCloseButton || (window->Flags & ImGuiWindowFlags_UnsavedDocument));
 }
 
 void ImGui::TabItemBackground(ImDrawList* draw_list, const ImRect& bb, ImGuiTabItemFlags flags, ImU32 col)

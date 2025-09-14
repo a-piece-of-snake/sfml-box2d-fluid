@@ -13,6 +13,8 @@
 #include <SFML/System.hpp>
 #include <SFML/Audio.hpp>
 
+#include <SFML/OpenGL.hpp>
+
 #include "GameObjects.h"
 
 namespace renderB2
@@ -50,6 +52,7 @@ namespace renderB2
         int camY;
     };
 
+    void init(sf::RenderWindow* window);
 
     void setRenderSettings(sf::Shape* shape, renderB2::RenderSettings rendersettings);
     void SFMLrenderShadow(sf::RenderWindow* window, sf::Shape* shape, float Thickness, int repeat, sf::Color Color);

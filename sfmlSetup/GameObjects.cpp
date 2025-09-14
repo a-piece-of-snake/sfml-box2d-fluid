@@ -3,9 +3,9 @@
 namespace GameObjects
 {
 
-    bool SpawnableObject::spawn(b2Vec2 pos) {
+    bool SpawnableObject::spawn(b2Vec2 pos, float size, float friction, float restitution) {
         if (onSpawned) {
-            return onSpawned(pos);
+            return onSpawned(pos, size, friction, restitution);
         }
         return false;
 	}
@@ -21,12 +21,13 @@ namespace GameObjects
     }
     void ParticleGroup::init() {
         cellSize = Config.radius * Config.Impact;
-        gridSizeX = static_cast<int>(10000.0f / cellSize); 
-        gridSizeY = static_cast<int>(10000.0f / cellSize); 
+        gridSizeX = static_cast<int>(5000.0f / cellSize); 
+        gridSizeY = static_cast<int>(5000.0f / cellSize); 
         gridBuckets.resize(gridSizeX * gridSizeY);
-        Particles.reserve(50000);
+        Particles.reserve(40000);
         Particles.clear();
         Particles.shrink_to_fit();
+        return;
     }
 
     /*
@@ -72,7 +73,7 @@ void ParticleGroup::UpdateData(World world) {
     const int n = Particles.size();
     if (n == 0) return;
 
-    int numThreads = std::thread::hardware_concurrency();
+    int numThreads = std::min(std::thread::hardware_concurrency(), (unsigned int)4);
     static ThreadPool pool(numThreads);
 
     int chunkSize = (n + numThreads - 1) / numThreads;
@@ -91,8 +92,6 @@ void ParticleGroup::UpdateData(World world) {
                     continue;
                 }
                 p.index = i;
-
-
 
                 //p.color = sf::Color::Cyan;
                 p.nextTickLinearImpulse = b2Vec2_zero;
@@ -126,9 +125,10 @@ void ParticleGroup::UpdateData(World world) {
         b2DestroyBody(Particles[idx].bodyId);
         Particles.erase(Particles.begin() + idx);
     }
+    return;
 }
 
-    void ParticleGroup::CreateParticle(GameObjects::World world,  float gravityScale, float radius, float x, float y, float density, float friction, float restitution,sf::Color color) {
+    void ParticleGroup::CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color) {
         Config.radius = radius;
         b2BodyDef bodyDef = b2DefaultBodyDef();
         bodyDef.position = { x, y };
@@ -138,7 +138,6 @@ void ParticleGroup::UpdateData(World world) {
         bodyDef.fixedRotation = true;
         bodyDef.isBullet = false;
         bodyDef.name = "Particle";
-        bodyDef.gravityScale = gravityScale;
         //bodyDef.sleepThreshold = radius / 5.f;
         b2BodyId bodyId = b2CreateBody(world.worldId, &bodyDef);
 
@@ -161,19 +160,23 @@ void ParticleGroup::UpdateData(World world) {
 
         const float queryRange = radius;
         //const float queryRange = radius * Config.Impact;
+        /*
         b2AABB aabb;
         aabb.lowerBound = b2Vec2{ x - queryRange, y - queryRange };
         aabb.upperBound = b2Vec2{ x + queryRange, y + queryRange };
+        */
 
         GameObjects::Particle p;
         p.bodyId = bodyId;
         p.shape = circle;
         p.shapeId = shapeId;
         p.mass = b2Body_GetMass(p.bodyId);
-       // if ((int)world.clock.getElapsedTime().asSeconds() % 2 >= 1) {
-            p.color = color;
-        //}
+        p.color = color;
+        p.pos = { x, y };
+
         Particles.push_back(p);
+
+        return;
     }
         void ParticleGroup::DestroyParticle(GameObjects::World world, GameObjects::Particle* particle) {
             for (auto it = Particles.begin(); it != Particles.end(); ) {
@@ -182,6 +185,7 @@ void ParticleGroup::UpdateData(World world) {
                     it = Particles.erase(it);
                 }
             }
+            return;
         }
         float ParticleGroup::GetForce(float dst, float radius) {
             if (dst >= radius) return 0;
@@ -228,6 +232,7 @@ void ParticleGroup::UpdateData(World world) {
                     }
                 }
             }
+            return;
         }
 
         void ParticleGroup::unfreeze() {
@@ -236,6 +241,7 @@ void ParticleGroup::UpdateData(World world) {
                     b2Body_SetType(p.bodyId, b2_dynamicBody);
                 }
             }
+            return;
         }
         void ParticleGroup::ComputeChunkForces(int start, int end, int threadID, float timestep) {
             thread_local std::vector<Particle*> neighbors;
@@ -250,8 +256,8 @@ void ParticleGroup::UpdateData(World world) {
                     neighbors.clear();
                     float density = 0.0f;
 
-                    int centerX = static_cast<int>((p.pos.x + 5000.0f) / cellSize);
-                    int centerY = static_cast<int>((p.pos.y + 5000.0f) / cellSize);
+                    int centerX = static_cast<int>((p.pos.x + 2500.0f) / cellSize);
+                    int centerY = static_cast<int>((p.pos.y + 2500.0f) / cellSize);
 
                     for (int dx = -1; dx <= 1; ++dx) {
                         for (int dy = -1; dy <= 1; ++dy) {
@@ -302,8 +308,8 @@ void ParticleGroup::UpdateData(World world) {
                         if (dst < effectiveRange) {
                             b2Vec2 forceDir = b2Normalize(offset);
 
-                            float densityScale = std::clamp(density, 0.0f, 3.f);
-                            float distanceForceMag = GetForce(dst, effectiveRange) * densityScale * MathUtils::Q_sqrt(densityScale);
+                            float densityScale = std::clamp(density, 0.25f, 2.5f);
+                            float distanceForceMag = GetForce(dst, effectiveRange) * densityScale * densityScale;// MathUtils::Q_sqrt(densityScale);
 
                             b2Vec2 repulsionForce = (Config.FORCE_MULTIPLIER) * forceDir * distanceForceMag * effectiveRange;
 
@@ -412,6 +418,7 @@ void ParticleGroup::UpdateData(World world) {
                     p.nextTickLinearImpulse = b2Vec2_zero;
                 }
             }
+            return;
         }
         void ParticleGroup::ApplyForce(int start, int end) {
             for (int idx = start; idx < end; ++idx) {
@@ -419,16 +426,15 @@ void ParticleGroup::UpdateData(World world) {
                 b2Body_ApplyLinearImpulseToCenter(p.bodyId, p.nextTickLinearImpulse, true);
                 b2Body_ApplyForceToCenter(p.bodyId, p.nextTickForce, true);
             }
+            return;
         }
 
         void ParticleGroup::ComputeParticleForces(float timestep) {
             const int n = Particles.size();
             if (n == 0) return;
 
-            int chunkSize = 256;
-            if (n <= 500)
-                chunkSize = 512;
-            int t = std::min(std::thread::hardware_concurrency(), (unsigned int)std::ceil(n / chunkSize));
+            int chunkSize = 512;
+            int t = std::min(std::thread::hardware_concurrency(), (unsigned int)8);
             static ThreadPool pool(t);
             std::vector<std::future<void>> futures;
             int i = 0;
@@ -461,5 +467,6 @@ void ParticleGroup::UpdateData(World world) {
                 f.wait();
             }
 
+            return;
         }
 }

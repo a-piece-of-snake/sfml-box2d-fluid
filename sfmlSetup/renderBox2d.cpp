@@ -15,7 +15,10 @@ namespace renderB2
 	sf::Font DefaultFont("Assets\\Fonts\\CangJiGaoDeGuoMiaoHei_CJgaodeguomh_2.ttf");
 	sf::Texture Smoke("Assets\\Textures\\smoke.png");
 	sf::Texture Soul("Assets\\Textures\\Soul.png");
-	const int MAX_PARTICLES = 1000;
+	sf::Texture MetaBall("Assets\\Textures\\metaball256.png");
+	sf::Texture blurTexture;
+	sf::Shader blurShader;
+	sf::Shader metaBallShader;
 
 	sf::Font getDefaultFont() {
 		DefaultFont.setSmooth(false);
@@ -34,6 +37,22 @@ namespace renderB2
 		}
 		return font;
 	}
+
+	void init(sf::RenderWindow* window) {
+		blurTexture.resize(window->getSize());
+		if (!blurShader.loadFromFile("Assets\\Shaders\\blur.frag", sf::Shader::Type::Fragment)) {
+			std::cerr << "Failed to load shaders" << std::endl;
+		}
+		if (!metaBallShader.loadFromFile("Assets\\Shaders\\metaball.frag", sf::Shader::Type::Fragment)) {
+			std::cerr << "Failed to load shader" << std::endl;
+		}
+		metaBallShader.setUniform("iResolution", sf::Vector2f(window->getSize()));
+		metaBallShader.setUniform("blurRadius", 3);
+
+		blurShader.setUniform("iResolution", sf::Vector2f(window->getSize()));
+		blurShader.setUniform("blurRadius", 3);
+	}
+
 	void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text) {
 		sf::FloatRect shapeBounds = shape.getGlobalBounds();
 		sf::FloatRect textBounds = text.getLocalBounds();
@@ -143,7 +162,9 @@ namespace renderB2
 			text->setOutlineColor(textoutlinecolor);
 			text->setOutlineThickness(textoutlinethickness);
 		}
+		return;
 	}
+	/*
 	void renderb2Polygon(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Polygon polygon, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
 		sf::ConvexShape shape;
 		shape.setPointCount(rendersettings.verticecount);
@@ -153,18 +174,6 @@ namespace renderB2
 			float screenY = screensettings.height / 2.0f - localVertex.y;
 			shape.setPoint(i, sf::Vector2f(screenY, screenX));
 		}
-		/*
-		sf::Vector2f minPoint(FLT_MAX, FLT_MAX), maxPoint(-FLT_MAX, -FLT_MAX);
-		for (size_t i = 0; i < shape.getPointCount(); i++) {
-			sf::Vector2f point = shape.getPoint(i);
-			minPoint.x = std::min(minPoint.x, point.x);
-			minPoint.y = std::min(minPoint.y, point.y);
-			maxPoint.x = std::max(maxPoint.x, point.x);
-			maxPoint.y = std::max(maxPoint.y, point.y);
-		}
-		sf::Vector2f center = (minPoint + maxPoint) / 2.f;
-		shape.setOrigin(center);
-		*/
 		shape.setOrigin({ shape.getLocalBounds().getCenter().x, shape.getLocalBounds().getCenter().y });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
@@ -173,16 +182,42 @@ namespace renderB2
 		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
 		shape.setRotation(sf::degrees(angle));
 		setRenderSettings(&shape, rendersettings);
+
+		blurTexture.update(*window);
+		blurShader.setUniform("screenTexture", blurTexture);
+
+		window->draw(shape, &blurShader);
 		window->draw(shape);
 		return;
 	}
+	*/
+	void renderb2Polygon(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Polygon polygon, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
+		sf::ConvexShape shape;
+		shape.setPointCount(rendersettings.verticecount);
+		for (int i = 0; i < rendersettings.verticecount; i++) {
+			b2Vec2 localVertex = polygon.vertices[i];
+			float screenX = localVertex.x + screensettings.width / 2.0f;
+			float screenY = screensettings.height / 2.0f - localVertex.y;
+			shape.setPoint(i, sf::Vector2f(screenY, screenX));
+		}
+		shape.setOrigin({ shape.getLocalBounds().getCenter().x, shape.getLocalBounds().getCenter().y });
+		b2Transform transform = b2Body_GetTransform(bodyId);
+		b2Vec2 pos = transform.p;
+		float angle = atan2(transform.q.s, transform.q.c) * 180.0f / B2_PI;
 
+		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
+		shape.setRotation(sf::degrees(angle));
+		setRenderSettings(&shape, rendersettings);
+
+		window->draw(shape);
+		return;
+	}
 	void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
 		sf::CircleShape shape(circle.radius, rendersettings.verticecount);
 		shape.setOrigin({ circle.radius, circle.radius });
 		b2Transform transform = b2Body_GetTransform(bodyId);
 		b2Vec2 pos = transform.p;
-		float angle = atan2(transform.q.s, transform.q.c) * -180.0f / B2_PI;
+		float angle = atan2(transform.q.s, transform.q.c) * 180.0f / B2_PI;
 
 		shape.setPosition(MathUtils::getSFpos(pos.x, pos.y));
 		shape.setRotation(sf::degrees(angle));
@@ -245,6 +280,7 @@ namespace renderB2
 			}
 		}
 		window->draw(point);
+		return;
 	}
 	void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
 		//sf::CircleShape shape(1,8);
@@ -266,6 +302,7 @@ namespace renderB2
 			};
 			window->draw(line, 2, sf::PrimitiveType::LineStrip);
 		}
+		return;
 	}
 	/*
 	sf::Image image({ 2400, 1350 }, sf::Color::Transparent);
@@ -334,7 +371,7 @@ namespace renderB2
 		}
 		return;
 	}
-
+	/*
 	sf::Image particle;
 	void renderwatershader(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
 		int size = group.Particles.size();
@@ -369,4 +406,61 @@ namespace renderB2
 		return;
 	}
 	//*/
+	void renderwatershader(sf::RenderWindow* window, renderB2::RenderSettings rendersettings,
+		GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings)
+	{
+		sf::RenderTexture renderTexture(window->getSize());
+		renderTexture.clear();
+
+		sf::VertexArray vertices(sf::PrimitiveType::Triangles);
+		vertices.resize(group.Particles.size() * 6);
+
+		int idx = 0;
+		for (auto& p : group.Particles) {
+			float radius = p.shape.radius * 4.25f;
+			sf::Vector2f pos = MathUtils::getSFpos(p.pos.x, p.pos.y) - window->mapPixelToCoords({ 0,0 });
+
+			sf::Vector2f offsets[4] = {
+				{-radius, -radius}, 
+				{ radius, -radius}, 
+				{ radius,  radius},
+				{-radius,  radius} 
+			};
+
+			sf::Vector2f texCoords[4] = {
+				{0.f,   0.f},  
+				{256.f, 0.f},   
+				{256.f, 256.f},  
+				{0.f,   256.f}    
+			};
+
+			int tri[6] = { 0,1,2, 0,2,3 };
+			for (int t = 0; t < 6; t++) {
+				int v = tri[t];
+				sf::Vertex& vertex = vertices[idx++];
+				vertex.position = pos + offsets[v];
+				vertex.texCoords = texCoords[v];
+				vertex.color = sf::Color::White;//p.color;
+			}
+		}
+
+		sf::RenderStates states;
+		states.texture = &MetaBall;
+
+		renderTexture.draw(vertices, states);
+		renderTexture.display();
+
+		sf::RectangleShape rectangle(sf::Vector2f(window->getSize()));
+		rectangle.setPosition(window->mapPixelToCoords({ 0, 0 }));
+		rectangle.setTexture(&renderTexture.getTexture());
+
+		blurTexture.update(*window);
+		metaBallShader.setUniform("screenTexture", blurTexture);
+
+		//states.blendMode = sf::BlendAdd;
+		states.shader = &metaBallShader;
+		window->draw(rectangle, states);
+	}
+
+
 }

@@ -76,6 +76,10 @@ private:
     int particleCount = 0;
     GameObjects::World world;
     GameObjects::ParticleGroup fluid;
+    GameObjects::SpawnableObject* selectedObject[10] = { nullptr };
+    float selectedObjectSize = 1.f;
+    float selectedObjectFriction = 0.8f;
+    float selectedObjectRestitution = 0.2f;
     std::vector<std::pair<b2BodyId, b2Polygon>> squares;
     std::vector<std::pair<b2BodyId, b2Circle>> circles;
     std::vector<b2BodyId> mapBodyId;
@@ -99,8 +103,11 @@ private:
     // 选择框
     struct SelectionBox {
         bool isSelecting = false;
+        /*
         sf::Vector2f startPos;
-        sf::Vector2f currentPos;
+        sf::Vector2f currentPos;*/
+        b2Vec2 startPos;
+        b2Vec2 currentPos;
     } selection;
 
     struct QueryContext
@@ -124,7 +131,7 @@ private:
     // 游戏逻辑
     void createSquare(float x, float y, float density, float friction, float restitution, float size);
     void createCircle(float x, float y, float density, float friction, float restitution, float size);
-
+    void createCup(float x, float y, float friction, float restitution, float width);
     // 循环分解
 	void InitWindow();
 	void InitImGui();
@@ -143,4 +150,6 @@ private:
     void ImguiMainMenuBar();
     void ImguiConsoleInputBox(float PADX, float PADY);
     void ImguiSpawnBrowser();
+    void ImguiSpawnObjSettings();
+    void ImguiSceneSettings();
 };
