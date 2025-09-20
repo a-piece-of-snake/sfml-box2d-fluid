@@ -20,6 +20,7 @@
 
 #include "ThreadPool.h"
 #include "MathUtils.h"
+#include "ColorfulLog.h"
 
 namespace GameObjects
 {
@@ -34,6 +35,8 @@ namespace GameObjects
         b2BodyId groundBodyId;
 		float timeStep;
 		int subStep;
+        int workerCount = std::thread::hardware_concurrency();
+        b2TaskCallback* taskCallback = nullptr;
     };
 
     struct SpawnableObject {
@@ -91,20 +94,23 @@ namespace GameObjects
         float friction = 0.0f;
         float restitution = 0.01f;
         float Impact = 5.f;
-        float MomentumCoefficient = 1.f;
-        float FORCE_MULTIPLIER = 15000.f;
+        float MOMENTUM_COEFFICIENT = 1.f;
+        float FORCE_MULTIPLIER = 40000.f;
         float FORCE_SURFACE = 75.f;
         float FORCE_ADHESION = 0.f;
         float SHEAR_VISCOSITY = 20.f;
-        float VISCOSITY = 8.f; 
-        float VISCOSITY_LEAVE = 0.8f;
+        float VISCOSITY = 0.f; 
+        float VISCOSITY_LEAVE = 0.f;
+        float MAX_GET_FORCE = 1000.f;
+        float MAX_FORCE = 250000.f;
+        float MIN_DENSITY = 0.25f;
+        float MAX_DENSITY = 3.f;
     };
     
     struct ParticleGroup {
         void init();
         std::vector<GameObjects::Particle> Particles;
         GameObjects::ParticleConfig Config;
-        b2DynamicTree dynamicTree;
         std::vector<std::vector<Particle*>> gridBuckets;
         int gridSizeX = 2500; 
         int gridSizeY = 2500;
@@ -130,7 +136,7 @@ namespace GameObjects
         void UpdateData(GameObjects::World world);
         void CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color);
         void DestroyParticle(GameObjects::World world, GameObjects::Particle* particle);
-        float GetForce(float dst, float radius);
+        static float GetForce(float dst, float radius);
         void freeze();
         void unfreeze();
         void ComputeChunkForces(int start, int end, int threadID, float timestep);

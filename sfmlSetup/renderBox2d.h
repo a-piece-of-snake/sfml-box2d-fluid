@@ -28,9 +28,12 @@ namespace renderB2
         extern sf::Color Button;
         extern sf::Color LightBlue;
         extern sf::Color B2BodyFill;
+        extern sf::Color B2BodyFill2;
     }
 
     extern sf::Font DefaultFont;
+    extern sf::Texture blurTexture;
+    extern sf::Shader blurShader;
     sf::Font getDefaultFont();
     sf::Font& getDefaultFontAddress();
     void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text);
@@ -61,6 +64,7 @@ namespace renderB2
     void renderSoul(sf::RenderWindow* window, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
+    void rendersandparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderwater(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderwatershader(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
@@ -122,12 +126,21 @@ namespace renderB2
             return bound;
         }
 
-        virtual void draw(sf::RenderWindow* window) {
-            if (shape)
+        virtual void draw(sf::RenderWindow* window, bool blur = false, bool root = true) {
+            if (shape) {
+                if (blur && !root) {
+                    blurTexture.update(*window);
+                    blurShader.setUniform("screenTexture", blurTexture);
+                    sf::RenderStates states;
+                    states.transform = getGlobalTransform();
+                    states.shader = &blurShader;
+                    window->draw(*shape, states);
+                }
                 window->draw(*shape, getGlobalTransform());
+            }
             for (MyUIObject* child : children)
                 if (child)
-                    child->draw(window);
+                    child->draw(window, blur, false);
         }
 
         void drawShadow(sf::RenderWindow* window, float thickness, int repeat = 0, sf::Color shadowColor = sf::Color(0, 0, 0, 128))
@@ -188,9 +201,18 @@ namespace renderB2
             return sf::FloatRect();
         }
 
-        virtual void draw(sf::RenderWindow* window) override {
-            if (shape)
+        virtual void draw(sf::RenderWindow* window, bool blur = false, bool root = true) override {
+            if (shape) {
+                if (blur && !root) {
+                    blurTexture.update(*window);
+                    blurShader.setUniform("screenTexture", blurTexture);
+                    sf::RenderStates states;
+                    states.transform = getGlobalTransform();
+                    states.shader = &blurShader;
+                    window->draw(*shape, states);
+                }
                 window->draw(*shape, getGlobalTransform());
+            }
 
             checkedShape.setSize(getGlobalBounds().size);
             uncheckedShape.setSize(getGlobalBounds().size);
@@ -203,6 +225,8 @@ namespace renderB2
                 if (child)
                     child->draw(window);
         }
+
+
 
         virtual void tick( sf::RenderWindow& window) {
             sf::Vector2i mousePixelPos = sf::Mouse::getPosition(window);

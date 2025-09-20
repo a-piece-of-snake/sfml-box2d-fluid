@@ -38,6 +38,11 @@ namespace MathUtils
         return x * Q_rsqrt(x);
     }
 
+    float b2Length(b2Vec2 v)
+    {
+        return Q_sqrt(v.x * v.x + v.y * v.y);
+    }
+
     sf::Vector2f getSFpos(float x, float y) {
         return sf::Vector2f{ y, -x };
     }

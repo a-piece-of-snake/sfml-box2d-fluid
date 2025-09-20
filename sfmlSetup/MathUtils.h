@@ -18,6 +18,8 @@ namespace MathUtils
 
     float Q_sqrt(float x);
 
+    float b2Length(b2Vec2 v);
+
     sf::Vector2f getSFpos(float x, float y);
 
     sf::Vector2f getViewOffset(const sf::View& view);

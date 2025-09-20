@@ -79,12 +79,54 @@ private:
     GameObjects::SpawnableObject* selectedObject[10] = { nullptr };
     float selectedObjectSize = 1.f;
     float selectedObjectFriction = 0.8f;
-    float selectedObjectRestitution = 0.2f;
+    float selectedObjectRestitution = 0.1f;
     std::vector<std::pair<b2BodyId, b2Polygon>> squares;
     std::vector<std::pair<b2BodyId, b2Circle>> circles;
     std::vector<b2BodyId> mapBodyId;
     bool Drag = false;
     b2ExplosionDef Dragdef = b2DefaultExplosionDef();
+
+    //不要看这里乱成屎了
+    static ThreadPool& GetThreadPool() {
+        static ThreadPool pool(std::min(8u, std::thread::hardware_concurrency()));
+        return pool;
+    }
+
+    struct Box2DTaskContext {
+        std::future<void> future;
+    };
+    
+    static void Box2DTaskFunction(int32_t startIndex, int32_t endIndex, uint32_t workerIndex, void* taskContext) {
+        auto taskFunc = static_cast<std::function<void(int32_t, int32_t, uint32_t)>*>(taskContext);
+        (*taskFunc)(startIndex, endIndex, workerIndex);
+    }
+
+    static void* CustomEnqueueTask(b2TaskCallback* task, int itemCount, int minRange, void* taskContext, void* userContext) {
+        ThreadPool& pool = GetThreadPool();
+
+        auto taskWrapper = new std::function<void()>(
+            [task, itemCount, taskContext]() {
+                task(0, itemCount, 0, taskContext);
+            }
+        );
+
+        auto future = pool.enqueue([taskWrapper]() {
+            (*taskWrapper)();
+            delete taskWrapper;
+            });
+
+        auto* handle = new std::future<void>(std::move(future));
+        return handle;
+    }
+
+    static void CustomFinishTask(void* taskHandle, void* userContext) {
+        if (taskHandle) {
+            auto* future = static_cast<std::future<void>*>(taskHandle);
+            future->wait();
+            delete future;
+        }
+    }
+
 
     // 相机
     float camX = 0.f, camY = 0.f;
@@ -132,6 +174,7 @@ private:
     void createSquare(float x, float y, float density, float friction, float restitution, float size);
     void createCircle(float x, float y, float density, float friction, float restitution, float size);
     void createCup(float x, float y, float friction, float restitution, float width);
+    void createCross(float x, float y, float friction, float restitution, float width);
     // 循环分解
 	void InitWindow();
 	void InitImGui();

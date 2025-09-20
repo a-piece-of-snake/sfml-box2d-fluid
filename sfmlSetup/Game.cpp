@@ -167,17 +167,18 @@ void Game::InitScene() {
     world.timeStep = 0.1f;
     world.subStep = 4;
 
-    //ThreadPool myThreadPool(std::thread::hardware_concurrency());
-    //b2Ctx.pool = &myThreadPool;
 
     b2WorldDef worldDef = b2DefaultWorldDef();
+
+    worldDef.workerCount = world.workerCount;
+    worldDef.enqueueTask = &CustomEnqueueTask; 
+    worldDef.finishTask = &CustomFinishTask;
+
+    
+
     worldDef.gravity = world.gravity;
     worldDef.contactHertz = world.contactHertz;
     worldDef.enableContinuous = false;
-    //worldDef.workerCount = std::thread::hardware_concurrency();
-    //worldDef.enqueueTask = MyEnqueueTask;
-    //worldDef.finishTask = MyFinishTask;
-    //worldDef.userTaskContext = &b2Ctx;
     world.worldId = b2CreateWorld(&worldDef);
 
 
@@ -299,6 +300,19 @@ void Game::LoadResources() {
             };
         spawnBrowser.addObject(cup);
     }
+    {
+        GameObjects::SpawnableObject cross;
+        cross.name = "Cross";
+        cross.type = "Solid";
+        cross.describe = "An ordinary cross.";
+        cross.icon = Snake;
+        cross.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+
+            this->createCross(pos.x, pos.y, friction, restitution, 200.f * size);
+            return true;
+            };
+        spawnBrowser.addObject(cross);
+    }
 
     SUCCESS("Successfully loaded resouces!");
 
@@ -330,16 +344,22 @@ void Game::Update() {
 void Game::Render() {
     window.clear(renderB2::DefaultColors::ClearFill);
 
+    window.setView(worldView);
+
+    sf::Vector2i offset = (sf::Vector2i)window.mapPixelToCoords({ 0, 0 });
+
     window.setView(uiView);
-    sf::RectangleShape BackGround({ (float)width - 350 * 2, (float)height - 125.f * 2 });
-    BackGround.move({ 350.f, 200.f });
+
+    //sf::RectangleShape BackGround({ (float)width - 350 * 2, (float)height - 125.f * 2 });
+    sf::RectangleShape BackGround({ (float)width, (float)height });
+    //BackGround.move({ 350.f, 200.f });
     BackGround.setOutlineThickness(3);
     BackGround.setOutlineColor(renderB2::DefaultColors::BackGroundOutline);
     BackGround.setTexture(&BackGroundT);
     BackGround.setTextureRect(sf::IntRect{
     {
-         (int)-(BackGround.getSize().x / 3),
-         (int)-(BackGround.getSize().y / 3)
+         (int)-(BackGround.getSize().x / 3) + (int)((float)offset.x / 1.5),
+         (int)-(BackGround.getSize().y / 3) + (int)((float)offset.y / 1.5)
     },
     {
          (int)(BackGround.getSize().x / 1.5),
@@ -362,9 +382,9 @@ void Game::Render() {
         selectionBox.setOutlineThickness(2);
         window.draw(selectionBox);
     }
-
+    
     window.setView(uiView);
-    {
+    /* {
         sf::RectangleShape backgroundBorder = BackGround;
         backgroundBorder.move({ -BackGround.getOutlineThickness(), -BackGround.getOutlineThickness() });
         backgroundBorder.setSize({ BackGround.getSize().x + BackGround.getOutlineThickness() * 2, BackGround.getSize().y + BackGround.getOutlineThickness() * 2 });
@@ -372,7 +392,7 @@ void Game::Render() {
         backgroundBorder.setOutlineColor(renderB2::DefaultColors::ClearFill);
         backgroundBorder.setOutlineThickness(1000.0f);
         window.draw(backgroundBorder);
-    }
+    }*/
 
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) {
         sf::CircleShape shape(Dragdef.radius, 32);
@@ -389,7 +409,6 @@ void Game::Render() {
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
         RenderSKeyOverlay();
     }
-
     ImGui::SFML::Render(window);
     window.display();
     lastmousePos = mousePos;
@@ -479,7 +498,7 @@ void Game::ImGuiRelated() {
 
     ImguiMainMenuBar();
 
-    if (ImGui::Begin("Fluid parameters")) {
+    if (ImGui::Begin("Fluid Parameters")) {
 
 	    ImGui::Text("Particle count: %d", particleCount);
         ImGui::Text("Ctrl + Click to edit it");
@@ -617,7 +636,7 @@ void Game::HandleEvent(const sf::Event& event) {
             float maxY = std::max(start.y, end.y);
             float Xlen = std::abs(maxX - minX);
             float Ylen = std::abs(maxY - minY);
-            const float gridSize = 125;//water
+            const float gridSize = 135;//water
             //const float gridSize = 75;
             float stepX = (maxX - minX) / (Xlen * gridSize / window.getSize().x);
             float stepY = (maxY - minY) / (Ylen * gridSize / window.getSize().y);
@@ -628,7 +647,7 @@ void Game::HandleEvent(const sf::Event& event) {
                     float y = minY + j * stepY + stepY / 2;
                     //createSquare(x, y, 0.5, 0.3, 0.1, 5);
                     //fluid.CreateParticle(world, -0.1, 4, x, y, 1.0f, 0.f, 0.1f); // smoke
-                    fluid.CreateParticle(world, 4, x, y, 2.5f, 0.f, 0.1f, sf::Color::Cyan); // water
+                    fluid.CreateParticle(world, 4, x, y, 2.5f, selectedObjectFriction, selectedObjectRestitution, sf::Color::Cyan); // water
                     //fluid.CreateParticle(world, 1, 4, x, y, 2.5f, 2.f, 0.1f, sf::Color::Cyan); // sand
                     particleCount++;
                 }
@@ -670,7 +689,7 @@ void Game::HandleEvent(const sf::Event& event) {
         */
         if (keyPressed->scancode == sf::Keyboard::Scan::P)
         {
-            renderParticle = (renderParticle + 1) % 4;
+            renderParticle = (renderParticle + 1) % 5;
         }
 
         if (keyPressed->scancode == sf::Keyboard::Scan::R) {
@@ -817,6 +836,9 @@ void Game::DrawWorld() {
         break;
     case 3:
         renderB2::renderparticletest(&window, rendersettings, fluid, screensettings);
+        break;
+    case 4:
+        renderB2::rendersandparticle(&window, rendersettings, fluid, screensettings);
         break;
     default:
 		ERROR("RenderParticle mode error!");
@@ -965,11 +987,11 @@ void Game::ImguiConsoleInputBox(float PADX, float PADY) {
     if (ImGui::Begin("##user command", nullptr , window_flags)) {
 
         char inputBuffer[1024] = "";
-        if (ImGui::InputText("Command", inputBuffer, sizeof(inputBuffer))) {
+        if (ImGui::InputText("Command", inputBuffer, sizeof(inputBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            DEBUG("User command: %s", userCommend.c_str());
         }
         else {
             if (userCommend != std::string(inputBuffer)) {
-                DEBUG("User command: %s", userCommend.c_str());
             }
         }
         userCommend = std::string(inputBuffer);
@@ -1047,8 +1069,6 @@ void Game::ImguiSpawnBrowser() {
                     selectedObject[9] = &obj;
                 }
             }
-
-
             /*
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
                 INFO("right");
@@ -1122,89 +1142,94 @@ void Game::ImguiSceneSettings() {
 }
 void Game::RenderUi() {
     {//左边ui
-        sf::RectangleShape leftUIshape({ 350.f - 8.f,  (float)height - 225.f });
+        //sf::RectangleShape leftUIshape({ 350.f - 8.f,  (float)height - 225.f });
+        sf::RectangleShape leftUIshape({ 350.f - 20.f,  (float)height - 50.f });
         leftUIshape.setFillColor(sf::Color::Transparent);
-        renderB2::MyUIObject* leftUI = new renderB2::MyUIObject(&leftUIshape, sf::Vector2f(8.f, 0.f + 200.f));
+        //renderB2::MyUIObject* leftUI = new renderB2::MyUIObject(&leftUIshape, sf::Vector2f(8.f, 0.f + 200.f));
+        renderB2::MyUIObject* leftUI = new renderB2::MyUIObject(&leftUIshape, sf::Vector2f(20.f, 0.f + 50.f));
         leftUI->lineSpacing = 5.f;
         //{
-        sf::ConvexShape ticktime = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-        ticktime.setFillColor(sf::Color::Transparent);
-        ticktime.setOutlineThickness(3.f);
-        renderB2::MyUIObject* root = new renderB2::MyUIObject(&ticktime, { 0, 0 }, 0);
-        sf::Text awa(renderB2::getDefaultFontAddress());
-        awa.setString("Tick Time\n  " + std::to_string((int)elapsedTime) + " ms");
-        awa.setStyle(sf::Text::Bold);
-        awa.setCharacterSize(30.f);
-        if (elapsedTime >= 100) {
-            ticktime.setOutlineColor(renderB2::DefaultColors::WarningOutline);
-            awa.setFillColor(renderB2::DefaultColors::WarningText);
-        }
-        else {
-            ticktime.setOutlineColor(sf::Color::White);
-            awa.setFillColor(sf::Color::White);
-        }
-        awa.setOrigin({ awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 });
-        renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
-        child->localPosition = { ticktime.getLocalBounds().size.x / 2, ticktime.getLocalBounds().size.y / 2 };
-        root->addChild(child);
-        //root->localPosition = { 8.f, 25.f };
-        //root->draw(&window);
-        leftUI->addChild(root);
+            sf::ConvexShape ticktime = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+            ticktime.setFillColor(sf::Color::Transparent);
+            ticktime.setOutlineThickness(3.f);
+            ticktime.setFillColor(renderB2::DefaultColors::B2BodyFill2);
+            renderB2::MyUIObject* root = new renderB2::MyUIObject(&ticktime, { 0, 0 }, 0);
+            sf::Text awa(renderB2::getDefaultFontAddress());
+            awa.setString("Tick Time\n  " + std::to_string((int)elapsedTime) + " ms");
+            awa.setStyle(sf::Text::Bold);
+            awa.setCharacterSize(30.f);
+            if (elapsedTime >= 100) {
+                ticktime.setOutlineColor(renderB2::DefaultColors::WarningOutline);
+                awa.setFillColor(renderB2::DefaultColors::WarningText);
+            }
+            else {
+                ticktime.setOutlineColor(sf::Color::White);
+                awa.setFillColor(sf::Color::White);
+            }
+            awa.setOrigin({ awa.getLocalBounds().size.x / 2, awa.getLocalBounds().size.y / 2 });
+            renderB2::MyUIObject* child = new renderB2::MyUIObject(&awa, sf::Vector2f(50.f, 0.f));
+            child->localPosition = { ticktime.getLocalBounds().size.x / 2, ticktime.getLocalBounds().size.y / 2 };
+            root->addChild(child);
+            //root->localPosition = { 8.f, 25.f };
+            //root->draw(&window);
+            leftUI->addChild(root);
         //}
         //{
-        if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-            fps = tickCount / fpsClock.getElapsedTime().asSeconds();
-            tickCount = 0;
-            fpsClock.restart();
-        }
-        sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-        tpsshape.setFillColor(sf::Color::Transparent);
-        tpsshape.setOutlineThickness(3.f);
-        renderB2::MyUIObject* root2 = new renderB2::MyUIObject(&tpsshape, { 0, 0 }, 0);
-        sf::Text awa2(renderB2::getDefaultFontAddress());
-        awa2.setString("FPS\n" + std::to_string((int)fps));
-        awa2.setStyle(sf::Text::Bold);
-        awa2.setCharacterSize(30.f);
-        if (fps <= 60) {
-            tpsshape.setOutlineColor(renderB2::DefaultColors::WarningOutline);
-            awa2.setFillColor(renderB2::DefaultColors::WarningText);
-        }
-        else {
-            tpsshape.setOutlineColor(sf::Color::White);
-            awa2.setFillColor(sf::Color::White);
-        }
-        awa2.setOrigin({ awa2.getLocalBounds().size.x / 2, awa2.getLocalBounds().size.y / 2 });
-        renderB2::MyUIObject* child2 = new renderB2::MyUIObject(&awa2, sf::Vector2f(50.f, 0.f));
-        child2->localPosition = { tpsshape.getLocalBounds().size.x / 2, tpsshape.getLocalBounds().size.y / 2 };
-        root2->addChild(child2);
-        //root2->localPosition = { 8.f, 151.f };
-        //root2->draw(&window);
-        leftUI->addChild(root2);
-        //}
-        //{
-        if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
-            fps = tickCount / fpsClock.getElapsedTime().asSeconds();
-            tickCount = 0;
-            fpsClock.restart();
-        }
-        sf::ConvexShape particlecount = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
-        particlecount.setFillColor(sf::Color::Transparent);
-        particlecount.setOutlineColor(sf::Color::White);
-        particlecount.setOutlineThickness(3.f);
-        renderB2::MyUIObject* root3 = new renderB2::MyUIObject(&particlecount, { 0, 0 }, 0);
-        sf::Text awa3(renderB2::getDefaultFontAddress());
-        awa3.setString("Particle Count\n     " + std::to_string(particleCount));
-        awa3.setStyle(sf::Text::Bold);
-        awa3.setCharacterSize(30.f);
-        awa3.setFillColor(sf::Color::White);
-        awa3.setOrigin({ awa3.getLocalBounds().size.x / 2, awa3.getLocalBounds().size.y / 2 });
-        renderB2::MyUIObject* child3 = new renderB2::MyUIObject(&awa3, sf::Vector2f(50.f, 0.f));
-        child3->localPosition = { particlecount.getLocalBounds().size.x / 2, particlecount.getLocalBounds().size.y / 2 };
-        root3->addChild(child3);
-        //root->localPosition = { 8.f, 277.f };
-        //root->draw(&window);
-        leftUI->addChild(root3);
-        leftUI->draw(&window);
+            if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+                fps = tickCount / fpsClock.getElapsedTime().asSeconds();
+                tickCount = 0;
+                fpsClock.restart();
+            }
+            sf::ConvexShape tpsshape = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+            tpsshape.setFillColor(sf::Color::Transparent);
+            tpsshape.setOutlineThickness(3.f);
+            tpsshape.setFillColor(renderB2::DefaultColors::B2BodyFill2);
+            renderB2::MyUIObject* root2 = new renderB2::MyUIObject(&tpsshape, { 0, 0 }, 0);
+            sf::Text awa2(renderB2::getDefaultFontAddress());
+            awa2.setString("FPS\n" + std::to_string((int)fps));
+            awa2.setStyle(sf::Text::Bold);
+            awa2.setCharacterSize(30.f);
+            if (fps <= 60) {
+                tpsshape.setOutlineColor(renderB2::DefaultColors::WarningOutline);
+                awa2.setFillColor(renderB2::DefaultColors::WarningText);
+            }
+            else {
+                tpsshape.setOutlineColor(sf::Color::White);
+                awa2.setFillColor(sf::Color::White);
+            }
+            awa2.setOrigin({ awa2.getLocalBounds().size.x / 2, awa2.getLocalBounds().size.y / 2 });
+            renderB2::MyUIObject* child2 = new renderB2::MyUIObject(&awa2, sf::Vector2f(50.f, 0.f));
+            child2->localPosition = { tpsshape.getLocalBounds().size.x / 2, tpsshape.getLocalBounds().size.y / 2 };
+            root2->addChild(child2);
+            //root2->localPosition = { 8.f, 151.f };
+            //root2->draw(&window);
+            leftUI->addChild(root2);
+            //}
+            //{
+            if (fpsClock.getElapsedTime().asSeconds() >= 1.0f) {
+                fps = tickCount / fpsClock.getElapsedTime().asSeconds();
+                tickCount = 0;
+                fpsClock.restart();
+            }
+            sf::ConvexShape particlecount = renderB2::getRectangleMinusCorners(330.f, 115.f, 11.5f);
+            particlecount.setFillColor(sf::Color::Transparent);
+            particlecount.setOutlineColor(sf::Color::White);
+            particlecount.setOutlineThickness(3.f);
+            particlecount.setFillColor(renderB2::DefaultColors::B2BodyFill2);
+            renderB2::MyUIObject* root3 = new renderB2::MyUIObject(&particlecount, { 0, 0 }, 0);
+            sf::Text awa3(renderB2::getDefaultFontAddress());
+            awa3.setString("Particle Count\n     " + std::to_string(particleCount));
+            awa3.setStyle(sf::Text::Bold);
+            awa3.setCharacterSize(30.f);
+            awa3.setFillColor(sf::Color::White);
+            awa3.setOrigin({ awa3.getLocalBounds().size.x / 2, awa3.getLocalBounds().size.y / 2 });
+            renderB2::MyUIObject* child3 = new renderB2::MyUIObject(&awa3, sf::Vector2f(50.f, 0.f));
+            child3->localPosition = { particlecount.getLocalBounds().size.x / 2, particlecount.getLocalBounds().size.y / 2 };
+            root3->addChild(child3);
+            //root->localPosition = { 8.f, 277.f };
+            //root->draw(&window);
+            leftUI->addChild(root3);
+        leftUI->draw(&window, true, true);
         //}
         //{
             /*
@@ -1394,6 +1419,25 @@ void Game::createSquare(float x, float y, float density, float friction, float r
     squares.push_back({ bodyId, square });
     return;
 }
+
+void Game::createCircle(float x, float y, float density, float friction, float restitution, float size) {
+    b2BodyDef bodyDef = b2DefaultBodyDef();
+    bodyDef.type = b2_dynamicBody;
+    bodyDef.position = b2Vec2{ x, y };
+    //bodyDef.fixedRotation = true;
+    b2BodyId bodyId = b2CreateBody(world.worldId, &bodyDef);
+
+    b2Circle circle;
+    circle.center = b2Vec2{ 0.0f, 0.0f };
+    circle.radius = size;
+    b2ShapeDef shapeDef = b2DefaultShapeDef();
+    shapeDef.density = density;
+    shapeDef.friction = friction;
+    shapeDef.restitution = restitution;
+    b2CreateCircleShape(bodyId, &shapeDef, &circle);
+    circles.push_back({ bodyId, circle });
+    return;
+}
 void Game::createCup(float x, float y, float friction, float restitution, float width) {
     float height = width * 1.5f;
     float wallThickness = width * 0.15f;
@@ -1430,7 +1474,7 @@ void Game::createCup(float x, float y, float friction, float restitution, float 
     squares.push_back({ rightWallId, rightWallBox });
 
     b2WeldJointDef weldDefLeft = b2DefaultWeldJointDef();
-	weldDefLeft.referenceAngle = 0.0f;
+    weldDefLeft.referenceAngle = 0.0f;
     weldDefLeft.bodyIdA = bottomId;
     weldDefLeft.bodyIdB = leftWallId;
     weldDefLeft.localAnchorA = b2Vec2{ -halfWidth, -halfWallThickness };
@@ -1445,21 +1489,38 @@ void Game::createCup(float x, float y, float friction, float restitution, float 
     weldDefRight.localAnchorB = b2Vec2{ halfWallThickness, -halfHeight };
     b2CreateWeldJoint(world.worldId, &weldDefRight);
 }
-void Game::createCircle(float x, float y, float density, float friction, float restitution, float size) {
-    b2BodyDef bodyDef = b2DefaultBodyDef();
-    bodyDef.type = b2_dynamicBody;
-    bodyDef.position = b2Vec2{ x, y };
-    //bodyDef.fixedRotation = true;
-    b2BodyId bodyId = b2CreateBody(world.worldId, &bodyDef);
+void Game::createCross(float x, float y, float friction, float restitution, float size) {
+    float armLength = size;
+    float armWidth = size / 10.f;
+    float halfArmLength = armLength / 2.0f;
+    float halfArmWidth = armWidth / 2.0f;
 
-    b2Circle circle;
-    circle.center = b2Vec2{ 0.0f, 0.0f };
-    circle.radius = size;
     b2ShapeDef shapeDef = b2DefaultShapeDef();
-    shapeDef.density = density;
+    shapeDef.density = 1.0f;
     shapeDef.friction = friction;
     shapeDef.restitution = restitution;
-    b2CreateCircleShape(bodyId, &shapeDef, &circle);
-    circles.push_back({ bodyId, circle });
-    return;
+
+    b2BodyDef horizontalArmDef = b2DefaultBodyDef();
+    horizontalArmDef.type = b2_dynamicBody;
+    horizontalArmDef.position = b2Vec2{ x, y };
+    b2BodyId horizontalArmId = b2CreateBody(world.worldId, &horizontalArmDef);
+    b2Polygon horizontalArmShape = b2MakeBox(halfArmLength, halfArmWidth);
+    b2CreatePolygonShape(horizontalArmId, &shapeDef, &horizontalArmShape);
+    squares.push_back({ horizontalArmId, horizontalArmShape });
+
+    b2BodyDef verticalArmDef = b2DefaultBodyDef();
+    verticalArmDef.type = b2_dynamicBody;
+    verticalArmDef.position = b2Vec2{ x, y };
+    b2BodyId verticalArmId = b2CreateBody(world.worldId, &verticalArmDef);
+    b2Polygon verticalArmShape = b2MakeBox(halfArmWidth, halfArmLength);
+    b2CreatePolygonShape(verticalArmId, &shapeDef, &verticalArmShape);
+    squares.push_back({ verticalArmId, verticalArmShape });
+
+    b2WeldJointDef weldDef = b2DefaultWeldJointDef();
+    weldDef.bodyIdA = horizontalArmId;
+    weldDef.bodyIdB = verticalArmId;
+    weldDef.localAnchorA = b2Vec2{ 0.0f, 0.0f };
+    weldDef.localAnchorB = b2Vec2{ 0.0f, 0.0f };
+    weldDef.referenceAngle = 0.0f;
+    b2CreateWeldJoint(world.worldId, &weldDef);
 }

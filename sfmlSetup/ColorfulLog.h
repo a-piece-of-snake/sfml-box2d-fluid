@@ -1,6 +1,9 @@
 #pragma once
 #include <cstdio>
 #include <cstdarg>
+#ifdef _WIN32
+    #include<Windows.h>
+#endif
 
 #define WHITE   "\033[1;37m"
 #define GRAY    "\033[1;30m"
