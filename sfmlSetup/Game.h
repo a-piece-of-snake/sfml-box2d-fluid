@@ -75,8 +75,8 @@ private:
     int renderParticle = 1;
     int particleCount = 0;
     GameObjects::World world;
-    GameObjects::ParticleGroup fluid;
-    GameObjects::SpawnableObject* selectedObject[10] = { nullptr };
+    GameObjects::ParticleWorld fluid;
+    GameObjects::SpawnableObject* selectedObject[11] = { nullptr };
     float selectedObjectSize = 1.f;
     float selectedObjectFriction = 0.8f;
     float selectedObjectRestitution = 0.1f;
@@ -175,9 +175,12 @@ private:
     void createCircle(float x, float y, float density, float friction, float restitution, float size);
     void createCup(float x, float y, float friction, float restitution, float width);
     void createCross(float x, float y, float friction, float restitution, float width);
+    void createBox(float x, float y, float friction, float restitution, float width);
+    void createSoftBody(float x, float y, float friction, float restitution, float size);
     // Ñ­»··Ö½â
 	void InitWindow();
 	void InitImGui();
+    void InitFluid();
     void InitScene();
 	void LoadResources();
     void Update();

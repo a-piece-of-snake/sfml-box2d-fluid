@@ -15,13 +15,12 @@ void main()
     float colOut = dot(col.rgb, vec3(0.299, 0.587, 0.114));
     
     if (colOut >= 0.5) {
-         col = vec4(0.0, 0.38, 0.83, 0.8);
          if (colOut <= 0.6)
-            col = vec4(0.0, 0.42, 0.85, 0.9);
+            col = vec4(1.0, 1.0, 1.0, 0.6);
          else 
-            col = vec4(0.0, 0.38, 0.73, 0.25);
+            col = vec4(1.0, 1.0, 1.0, 0.1);
     } else {
-        col = vec4(0.0); 
+        col = vec4(0.0);
     }
         gl_FragColor = col;
 }

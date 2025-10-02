@@ -17,6 +17,44 @@
 
 #include "GameObjects.h"
 
+#include "imgui/imgui_internal.h"
+
+namespace ImGui {
+    //https://github.com/ocornut/imgui/issues/1537#issuecomment-355569554
+    inline void ToggleButton(const char* str_id, bool* v)
+    {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+        float height = ImGui::GetFrameHeight();
+        float width = height * 1.55f;
+        float radius = height * 0.50f;
+
+        ImGui::InvisibleButton(str_id, ImVec2(width, height));
+        if (ImGui::IsItemClicked())
+            *v = !*v;
+
+        float t = *v ? 1.0f : 0.0f;
+
+        ImGuiContext& g = *GImGui;
+        float ANIM_SPEED = 0.08f;
+        if (g.LastActiveId == g.CurrentWindow->GetID(str_id))// && g.LastActiveIdTimer < ANIM_SPEED)
+        {
+            float t_anim = ImSaturate(g.LastActiveIdTimer / ANIM_SPEED);
+            t = *v ? (t_anim) : (1.0f - t_anim);
+        }
+
+        ImU32 col_bg;
+        if (ImGui::IsItemHovered())
+            col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.78f, 0.78f, 0.78f, 1.0f), ImVec4(0.64f, 0.83f, 0.34f, 1.0f), t));
+        else
+            col_bg = ImGui::GetColorU32(ImLerp(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), ImVec4(0.56f, 0.83f, 0.26f, 1.0f), t));
+
+        draw_list->AddRectFilled(p, ImVec2(p.x + width, p.y + height), col_bg, height * 0.5f);
+        draw_list->AddCircleFilled(ImVec2(p.x + radius + t * (width - radius * 2.0f), p.y + radius), radius - 1.5f, IM_COL32(255, 255, 255, 255));
+    }
+}
+
 namespace renderB2
 {
     namespace DefaultColors {
@@ -61,10 +99,12 @@ namespace renderB2
     void SFMLrenderShadow(sf::RenderWindow* window, sf::Shape* shape, float Thickness, int repeat, sf::Color Color);
     void SFMLrenderShadow2(sf::RenderWindow* window, sf::Drawable* drawable, const sf::Transform& baseTransform, float thickness, int repeat, sf::Color shadowColor);
     void renderb2Polygon(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Polygon polygon, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
+    void renderb2Polygons(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, std::vector<std::pair<b2BodyId, b2Polygon>> polygons, renderB2::ScreenSettings screensettings);
     void renderSoul(sf::RenderWindow* window, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings);
     void rendersimpleparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void rendersandparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
+    void rendergasparticle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderwater(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);
     void renderwatershader(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings);

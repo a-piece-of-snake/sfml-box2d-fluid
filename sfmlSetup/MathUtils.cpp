@@ -2,6 +2,77 @@
 
 namespace MathUtils
 {
+
+    float cross(const b2Vec2& a, const b2Vec2& b, const b2Vec2& c) {
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    }
+
+    bool pointInTriangle(const b2Vec2& a, const b2Vec2& b, const b2Vec2& c, const b2Vec2& p) {
+        float cross1 = cross(a, b, p);
+        float cross2 = cross(b, c, p);
+        float cross3 = cross(c, a, p);
+
+        return (cross1 >= 0 && cross2 >= 0 && cross3 >= 0) ||
+            (cross1 <= 0 && cross2 <= 0 && cross3 <= 0);
+    }
+
+    bool triangleContainsPoint(const std::vector<b2Vec2>& vertices, int a, int b, int c, const std::vector<int>& indices) {
+        for (int index : indices) {
+            if (index == a || index == b || index == c) continue;
+
+            if (pointInTriangle(vertices[a], vertices[b], vertices[c], vertices[index])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool isEar(const std::vector<b2Vec2>& vertices, int prev, int current, int next, const std::vector<int>& indices) {
+        if (cross(vertices[prev], vertices[current], vertices[next]) < 0) {
+            return false;
+        }
+
+        return !triangleContainsPoint(vertices, prev, current, next, indices);
+    }
+
+    std::vector<std::vector<int>> triangulate(const std::vector<b2Vec2>& vertices) {
+        std::vector<std::vector<int>> triangles;
+        if (vertices.size() < 3) return triangles;
+
+        std::vector<int> indices;
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            indices.push_back(static_cast<int>(i));
+        }
+
+        int n = static_cast<int>(indices.size());
+        int current = 0;
+
+        while (n > 3) {
+            int prev = (current - 1 + n) % n;
+            int next = (current + 1) % n;
+
+            if (isEar(vertices, indices[prev], indices[current], indices[next], indices)) {
+                std::vector<int> triangle = { indices[prev], indices[current], indices[next] };
+                triangles.push_back(triangle);
+
+                indices.erase(indices.begin() + current);
+                n--;
+
+                current = std::max(0, current - 1);
+            }
+            else {
+                current = (current + 1) % n;
+            }
+        }
+
+        if (n == 3) {
+            std::vector<int> triangle = { indices[0], indices[1], indices[2] };
+            triangles.push_back(triangle);
+        }
+
+        return triangles;
+    }
+
     sf::Color encodeFloatToRGBA(float value) {
         union {
             float f;

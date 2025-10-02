@@ -10,25 +10,29 @@ namespace GameObjects
         return false;
 	}
 
-    int ParticleGroup::getHash2D(std::pair<int, int> gridPos) {
-        return hashMapSize / 2 + ((gridPos.first * prime1) ^ (gridPos.second * prime2)) % (hashMapSize / 2);
+    int ParticleWorld::getHash2D(std::pair<int, int> gridPos) {
+        unsigned int hash = (unsigned int)(gridPos.first * prime1 ^ gridPos.second * prime2);
+        return hash % hashMapSize;
     }
 
-    std::pair<int, int> ParticleGroup::getGridPos(GameObjects::Particle& pariticle) {
-        int x = std::floor(pariticle.pos.x / (Config.radius * Config.Impact));
-        int y = std::floor(pariticle.pos.y / (Config.radius * Config.Impact));
-		return { x, y };
+    std::pair<int, int> ParticleWorld::getGridPos(GameObjects::Particle& particle) {
+        int x = static_cast<int>(std::floor(particle.pos.x / cellSize));
+        int y = static_cast<int>(std::floor(particle.pos.y / cellSize));
+        return { x, y };
     }
+    
+    void ParticleWorld::init() {
+        //cellSize = Config.radius * Config.Impact;
+        for (auto& group : ParticleGroups) {
+            group.Particles.reserve(10000);
+            group.Particles.clear();
+        }
 
-    void ParticleGroup::init() {
-        cellSize = Config.radius * Config.Impact;
-        gridSizeX = static_cast<int>(5000.0f / cellSize); 
-        gridSizeY = static_cast<int>(5000.0f / cellSize); 
-        gridBuckets.resize(gridSizeX * gridSizeY);
-        Particles.reserve(40000);
-        Particles.clear();  
+        gridBuckets.clear();
+        gridBuckets.resize(hashMapSize);
         return;
     }
+
 
     /*
 void ParticleGroup::UpdateData(World world) {
@@ -66,30 +70,13 @@ void ParticleGroup::UpdateData(World world) {
     }
 }*/
     void ParticleGroup::UpdateData(World world) {
-        for (auto& bucket : gridBuckets) {
-            bucket.clear();
-        }
 
         const int n = static_cast<int>(Particles.size());
         if (n == 0) return;
 
-        //std::vector<int> toDelete;
-        //toDelete.reserve(Particles.size());
 
         for (int i = 0; i < n; ++i) {
             Particle& p = Particles[i];
-
-            /*
-            if (p.life >= 0 && ++p.age > p.life) {
-                toDelete.push_back(i);
-                continue;
-            }
-
-            if (B2_IS_NULL(p.bodyId)) {
-                toDelete.push_back(i);
-                continue;
-            }
-            */
 
             if (B2_IS_NULL(p.bodyId)) {
                 Particles.erase(Particles.begin() + p.index);
@@ -99,34 +86,46 @@ void ParticleGroup::UpdateData(World world) {
             p.index = i;
             p.color = sf::Color::Cyan;
             p.nextTickLinearImpulse = b2Vec2_zero;
+            p.nextTickForce = b2Vec2_zero;
             p.pos = b2Body_GetPosition(p.bodyId);
             p.LinearVelocity = b2Body_GetLinearVelocity(p.bodyId);
 
 
-            int gx = std::clamp(static_cast<int>((p.pos.x + 2500.0f) / cellSize), 0, gridSizeX - 1);
-            int gy = std::clamp(static_cast<int>((p.pos.y + 2500.0f) / cellSize), 0, gridSizeY - 1);
-            if (gy * gridSizeX + gx < static_cast<int>(gridBuckets.size())) {
-                gridBuckets[gy * gridSizeX + gx].push_back(&p);
+            auto gridPos = particleWorld->getGridPos(p);
+            int hashIndex = particleWorld->getHash2D(gridPos);
+
+            if (hashIndex >= 0 && hashIndex < static_cast<int>(particleWorld->gridBuckets.size())) {
+                particleWorld->gridBuckets[hashIndex].push_back(&p);
             }
         }
-        /*
-        for (int j = static_cast<int>(toDelete.size()) - 1; j >= 0; --j) {
-            int idx = toDelete[j];
-            if (idx < static_cast<int>(Particles.size()) && !B2_IS_NULL(Particles[idx].bodyId)) {
-                b2DestroyBody(Particles[idx].bodyId);
+
+        return;
+    }
+    void ParticleWorld::UpdateData(World world) {
+        for (auto& bucket : gridBuckets) {
+            bucket.clear();
+        }
+        for (auto& group : ParticleGroups) {
+            group.UpdateData(world);
+		}
+        for (auto& bucket : gridBuckets) {
+            if (!bucket.empty()) {
+                std::sort(bucket.begin(), bucket.end(),
+                    [](const Particle* a, const Particle* b) {
+                        return a->index < b->index;
+                    });
             }
-            if (idx < static_cast<int>(Particles.size())) {
-                Particles.erase(Particles.begin() + idx);
-            }
-        }*/
+        }
         return;
     }
 
 
-    void ParticleGroup::CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color) {
+    void ParticleGroup::CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color, float gravityscale) {
         Config.radius = radius;
+		particleWorld->cellSize = radius * Config.Impact;
         b2BodyDef bodyDef = b2DefaultBodyDef();
         bodyDef.position = { x, y };
+        bodyDef.gravityScale = gravityscale;
         bodyDef.type = b2_dynamicBody;
         bodyDef.linearDamping = 0.01f;
         bodyDef.angularDamping = 0.01f;
@@ -168,6 +167,7 @@ void ParticleGroup::UpdateData(World world) {
         p.mass = b2Body_GetMass(p.bodyId);
         p.color = color;
         p.pos = { x, y };
+        p.name = Config.NAME;
 
         Particles.push_back(p);
 
@@ -279,22 +279,18 @@ void ParticleGroup::UpdateData(World world) {
                 radiusB = Config.Impact;
                 dst = 0.f;
 
-                int centerX = static_cast<int>((p.pos.x + 2500.0f) / cellSize);
-                int centerY = static_cast<int>((p.pos.y + 2500.0f) / cellSize);
+                int centerX = static_cast<int>((p.pos.x + 2500.0f) / particleWorld->cellSize);
+                auto centerGridPos = particleWorld->getGridPos(p);
 
                 for (int dx = -1; dx <= 1; ++dx) {
                     for (int dy = -1; dy <= 1; ++dy) {
-                        int x = centerX + dx;
-                        int y = centerY + dy;
+                        std::pair<int, int> gridPos = { centerGridPos.first + dx, centerGridPos.second + dy };
+                        int hashIndex = particleWorld->getHash2D(gridPos);
 
-                        if (x < 0 || x >= gridSizeX || y < 0 || y >= gridSizeY)
+                        if (hashIndex < 0 || hashIndex >= static_cast<int>(particleWorld->gridBuckets.size()))
                             continue;
 
-                        int gridIndex = y * gridSizeX + x;
-                        if (gridIndex >= static_cast<int>(gridBuckets.size()))
-                            continue;
-
-                        const auto& bucket = gridBuckets[gridIndex];
+                        const auto& bucket = particleWorld->gridBuckets[hashIndex];
                         for (Particle* other : bucket) {
                             if (!other || other == &p) continue;
 
@@ -302,10 +298,10 @@ void ParticleGroup::UpdateData(World world) {
                                 other->color = sf::Color::Yellow;
                                 p.color = sf::Color::Green;
                             }
-                            float dist = MathUtils::b2Length(other->pos - posA);
+                            float dist = MathUtils::b2Length(b2Vec2{ other->pos.x - posA.x, other->pos.y - posA.y });
                             if (dist < range && dist > 0.001f) {
                                 force = GetForce(dist, range);
-                                density += p.mass * (force > Config.MAX_FORCE ? Config.MAX_FORCE : force);
+                                density += ((p.mass + other->mass) / 2) * (force > Config.MAX_FORCE ? Config.MAX_FORCE : force);
                                 neighbors.push_back(other);
                                 if (p.index == 0) {
                                     other->color = sf::Color::Red;
@@ -314,7 +310,7 @@ void ParticleGroup::UpdateData(World world) {
                         }
                     }
                 }
-                p.neighborCount = int(neighbors.size());
+                p.neighborCount = static_cast<int>(neighbors.size());
 
                 for (Particle* other : neighbors) {
                     ///*
@@ -338,9 +334,11 @@ void ParticleGroup::UpdateData(World world) {
                         b2Vec2 velB = other->LinearVelocity;
                         b2Vec2 momentumForce = (velA - velB) * ((effectiveRange - dst) / effectiveRange) * Config.MOMENTUM_COEFFICIENT;
 
-                        neighborPosSum += posB;
-						neighborVecSum += other->LinearVelocity;
-                        attractCount++;
+                        if (p.name == other->name) {
+                            neighborPosSum += posB;
+                            neighborVecSum += other->LinearVelocity;
+                            attractCount++;
+                        }
 
                         float rNorm = dst / effectiveRange;
                         rNorm = std::clamp(rNorm, 0.1f, 10.0f); 
@@ -371,6 +369,8 @@ void ParticleGroup::UpdateData(World world) {
 
                         float attenuation = 1.0f - (rNorm);
                         frictionForce *= attenuation;
+
+
 
                         b2Vec2 totalForce = (repulsionForce + momentumForce + frictionForce + viscForce) * timestep;
                         totalForce.x = std::clamp(totalForce.x, -Config.MAX_GET_FORCE, Config.MAX_GET_FORCE);
@@ -455,7 +455,7 @@ void ParticleGroup::UpdateData(World world) {
         if (n == 0) return;
 
         const int chunkSize = 512;
-        const int numThreads = std::min(static_cast<unsigned int>(4), std::thread::hardware_concurrency());
+        const int numThreads = std::min(static_cast<unsigned int>(2), std::thread::hardware_concurrency());
         static ThreadPool pool(numThreads);
         std::vector<std::future<void>> futures;
 
@@ -485,6 +485,12 @@ void ParticleGroup::UpdateData(World world) {
             }
         }
 
+        return;
+    }
+    void ParticleWorld::ComputeParticleForces(float timestep) {
+        for (auto& group : ParticleGroups) {
+			group.ComputeParticleForces(timestep);
+        }
         return;
     }
 }

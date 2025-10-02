@@ -14,6 +14,8 @@
 
 namespace MathUtils
 {
+    std::vector<std::vector<int>> triangulate(const std::vector<b2Vec2>& vertices);
+
     sf::Color encodeFloatToRGBA(float value);
 
     float Q_sqrt(float x);

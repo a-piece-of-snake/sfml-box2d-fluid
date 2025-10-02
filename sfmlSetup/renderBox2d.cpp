@@ -16,7 +16,7 @@ namespace renderB2
 	sf::Font DefaultFont("Assets\\Fonts\\CangJiGaoDeGuoMiaoHei_CJgaodeguomh_2.ttf");
 	sf::Texture Smoke("Assets\\Textures\\smoke.png");
 	sf::Texture Soul("Assets\\Textures\\Soul.png");
-	sf::Texture MetaBall("Assets\\Textures\\metaball256.png");
+	sf::Texture MetaBall("Assets\\Textures\\metaball256-2.png");
 	sf::Texture Circle("Assets\\Textures\\circle.png");
 	sf::Shader metaBallShader;
 	sf::Texture blurTexture;
@@ -52,7 +52,7 @@ namespace renderB2
 		metaBallShader.setUniform("blurRadius", 3);
 
 		blurShader.setUniform("iResolution", sf::Vector2f(window->getSize()));
-		blurShader.setUniform("blurRadius", 5);
+		blurShader.setUniform("blurRadius", 3);
 	}
 
 	void renderTextInShape(sf::RenderWindow* window, sf::Shape& shape, sf::Text& text) {
@@ -214,6 +214,79 @@ namespace renderB2
 		window->draw(shape);
 		return;
 	}
+
+	void renderb2Polygons(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, std::vector<std::pair<b2BodyId, b2Polygon>> polygons, renderB2::ScreenSettings screensettings) {
+		//blurTexture.update(*window);
+		//blurShader.setUniform("screenTexture", blurTexture);
+		for (auto& [bodyId, polygon] : polygons) {
+			std::vector<b2Vec2> vertices;
+			for (int i = 0; i < polygon.count; i++) {
+				vertices.push_back(polygon.vertices[i]);
+			}
+
+			auto triangles = MathUtils::triangulate(vertices);
+
+			b2Transform transform = b2Body_GetTransform(bodyId);
+			b2Vec2 pos = transform.p;
+			float angle = atan2(transform.q.s, transform.q.c);
+
+			float cosAngle = cos(angle);
+			float sinAngle = sin(angle);
+
+			sf::VertexArray vertexArray(sf::PrimitiveType::Triangles);
+
+			for (const auto& triangle : triangles) {
+				for (int i = 0; i < 3; i++) {
+					int vertexIndex = triangle[i];
+					if (vertexIndex >= static_cast<int>(vertices.size())) continue;
+
+					b2Vec2 localVertex = vertices[vertexIndex];
+
+					float rotatedX = localVertex.x * cosAngle - localVertex.y * sinAngle;
+					float rotatedY = localVertex.x * sinAngle + localVertex.y * cosAngle;
+
+					float screenX = pos.x + rotatedX;
+					float screenY = pos.y + rotatedY;
+
+					sf::Vertex vertex;
+					vertex.position = MathUtils::getSFpos(screenX, screenY);
+					vertex.color = rendersettings.FillColor;
+					vertexArray.append(vertex);
+				}
+			}
+
+			if (vertexArray.getVertexCount() > 0) {
+				//window->draw(vertexArray, &blurShader);
+				window->draw(vertexArray);
+			}
+			if (rendersettings.OutlineThickness > 0) {
+				std::vector<sf::Vector2f> transformedVertices;
+
+				for (int i = 0; i < polygon.count; i++) {
+					b2Vec2 localVertex = polygon.vertices[i];
+
+					float rotatedX = localVertex.x * cosAngle - localVertex.y * sinAngle;
+					float rotatedY = localVertex.x * sinAngle + localVertex.y * cosAngle;
+
+					float screenX = pos.x + rotatedX;
+					float screenY = pos.y + rotatedY;
+
+					transformedVertices.push_back(MathUtils::getSFpos(screenX, screenY));
+				}
+
+				for (size_t i = 0; i < transformedVertices.size(); i++) {
+					size_t next = (i + 1) % transformedVertices.size();
+
+					sf::VertexArray line(sf::PrimitiveType::Lines, 2);
+					line[0] = { transformedVertices[i], rendersettings.OutlineColor };
+					line[1] = { transformedVertices[next], rendersettings.OutlineColor };
+
+					window->draw(line);
+				}
+			}
+		}
+		return;
+	}
 	void renderb2circle(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, b2Circle circle, b2BodyId bodyId, renderB2::ScreenSettings screensettings) {
 		sf::CircleShape shape(circle.radius, rendersettings.verticecount);
 		shape.setOrigin({ circle.radius, circle.radius });
@@ -324,6 +397,46 @@ namespace renderB2
 		window->draw(point, states);
 		return;
 	}
+	void rendergasparticle(sf::RenderWindow* window,
+		renderB2::RenderSettings rendersettings,
+		GameObjects::ParticleGroup& group,
+		renderB2::ScreenSettings screensettings)
+	{
+		//sf::VertexArray point(sf::PrimitiveType::Points, group.Particles.size() * 9);
+		sf::VertexArray point(sf::PrimitiveType::Triangles, group.Particles.size() * 12);
+		int count = 0;
+		const sf::Vector2f offset[3] = { { 0, 0 },   { 1, 0 },   { 0, 1 } };
+		const sf::Vector2f offset2[3] = { { 1, 1 },   { 1, 0 },   { 0, 1 } };
+		for (const auto& p : group.Particles)
+		{
+			const sf::Vector2f center = MathUtils::getSFpos(p.pos.x, p.pos.y);
+			/*
+			for (int i = -1; i <= 1; ++i) {
+				for (int j = -1; j <= 1; ++j) {
+					point[count].color = rendersettings.FillColor;
+					point[count].position = { center.x + i, center.y + j };
+					count++;
+				}
+			}
+			*/
+			for (int i = 0; i < 3; ++i) {
+				point[count].color = sf::Color::White;
+				point[count].position = center + sf::Vector2f{ (offset[i].x - 0.5f) * p.shape.radius * 10.5f, (offset[i].y - 0.5f) * p.shape.radius * 10.5f };
+				point[count].texCoords = sf::Vector2f{ offset[i].x * 128, offset[i].y * 128 };
+				count++;
+			}
+			for (int i = 0; i < 3; ++i) {
+				point[count].color = sf::Color::White;
+				point[count].position = center + sf::Vector2f{ (offset2[i].x - 0.5f) * p.shape.radius * 10.5f, (offset2[i].y - 0.5f) * p.shape.radius * 10.5f };
+				point[count].texCoords = sf::Vector2f{ offset2[i].x * 128, offset2[i].y * 128 };
+				count++;
+			}
+		}
+		sf::RenderStates states;
+		states.texture = &Smoke;
+		window->draw(point, states);
+		return;
+	}
 	void renderparticletest(sf::RenderWindow* window, renderB2::RenderSettings rendersettings, GameObjects::ParticleGroup& group, renderB2::ScreenSettings screensettings) {
 		//sf::CircleShape shape(1,8);
 
@@ -390,7 +503,7 @@ namespace renderB2
 
 		int idx = 0;
 		for (auto& p : group.Particles) {
-			float radius = p.shape.radius * 4.25f;
+			float radius = p.shape.radius * 5.75f;
 			sf::Vector2f pos = MathUtils::getSFpos(p.pos.x, p.pos.y) - window->mapPixelToCoords({ 0,0 });
 
 			sf::Vector2f offsets[4] = {
@@ -426,11 +539,11 @@ namespace renderB2
 		sf::RectangleShape rectangle(sf::Vector2f(window->getSize()));
 		rectangle.setPosition(window->mapPixelToCoords({ 0, 0 }));
 		rectangle.setTexture(&renderTexture.getTexture());
-
+		/*
 		blurTexture.update(*window);
 		metaBallShader.setUniform("screenTexture", blurTexture);
-
-		//states.blendMode = sf::BlendAdd;
+		*/
+		states.blendMode = sf::BlendAdd;
 		states.shader = &metaBallShader;
 		window->draw(rectangle, states);
 	}

@@ -79,6 +79,7 @@ namespace GameObjects
         b2Vec2 nextTickLinearImpulse = b2Vec2_zero;
 		unsigned int bubleTime = 0;
 
+        std::string name = "Water";
         sf::Color color = sf::Color::Cyan;
         b2BodyId bodyId;
         b2ShapeId shapeId;
@@ -96,45 +97,26 @@ namespace GameObjects
         float Impact = 5.f;
         float MOMENTUM_COEFFICIENT = 1.f;
         float FORCE_MULTIPLIER = 40000.f;
-        float FORCE_SURFACE = 75.f;
+        float FORCE_SURFACE = 50.f;
         float FORCE_ADHESION = 0.f;
         float SHEAR_VISCOSITY = 20.f;
         float VISCOSITY = 0.f; 
         float VISCOSITY_LEAVE = 0.f;
-        float MAX_GET_FORCE = 1000.f;
-        float MAX_FORCE = 250000.f;
+        float MAX_GET_FORCE = 1250.f;
+        float MAX_FORCE = 175000.f;
         float MIN_DENSITY = 0.25f;
         float MAX_DENSITY = 3.f;
+        std::string NAME = "Water";
     };
-    
+    struct ParticleWorld;
+
     struct ParticleGroup {
-        void init();
         std::vector<GameObjects::Particle> Particles;
         GameObjects::ParticleConfig Config;
-        std::vector<std::vector<Particle*>> gridBuckets;
-        int gridSizeX = 2500; 
-        int gridSizeY = 2500;
-        float cellSize = 10.0f;
+        ParticleWorld* particleWorld;
 
-        int getGridIndex(int x, int y) const {
-            x = std::clamp(x, 0, gridSizeX - 1);
-            y = std::clamp(y, 0, gridSizeY - 1);
-            return y * gridSizeX + x;
-        }
-
-        void clearGrid() {
-            for (auto& bucket : gridBuckets) {
-                bucket.clear();
-            }
-        }
-        const int prime1 = 6614058611;
-        const int prime2 = 7528850467;
-        const int hashMapSize = 50000;
-
-        int getHash2D(std::pair<int, int> gridPos);
-        std::pair<int, int> getGridPos(GameObjects::Particle& pariticle);
         void UpdateData(GameObjects::World world);
-        void CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution,sf::Color color);
+        void CreateParticle(GameObjects::World world, float radius, float x, float y, float density, float friction, float restitution, sf::Color color, float gravityscale = 1.f);
         void DestroyParticle(GameObjects::World world, GameObjects::Particle* particle);
         static float GetForce(float dst, float radius);
         void freeze();
@@ -142,6 +124,25 @@ namespace GameObjects
         void ComputeChunkForces(int start, int end, int threadID, float timestep);
         void ApplyForce(int start, int end);
         void ComputeParticleForces(float timestep);
-		std::mutex mutex;
+		//std::mutex mutex;
+    };
+
+    struct ParticleWorld {
+        std::vector<ParticleGroup> ParticleGroups;
+        std::vector<std::vector<Particle*>> gridBuckets;
+        float cellSize = 10.0f;
+        const int prime1 = 6614058611;
+        const int prime2 = 7528850467;
+        const int hashMapSize = 50000;
+        int getHash2D(std::pair<int, int> gridPos);
+        std::pair<int, int> getGridPos(GameObjects::Particle& pariticle);
+        void clearGrid() {
+            for (auto& bucket : gridBuckets) {
+                bucket.clear();
+            }
+        }
+        void init();
+        void UpdateData(GameObjects::World world);
+        void ComputeParticleForces(float timestep);
     };
 }

@@ -20,8 +20,8 @@ void Game::Init() {
     LoadResources();
 
     setConsoleTitle("Game Logs");
-     
-    fluid.init();
+    
+    InitFluid();
 
     InitScene();
 
@@ -162,6 +162,42 @@ void Game::InitImGui() {
     return;
 }
 
+void Game::InitFluid() {
+    fluid.init();
+
+	GameObjects::ParticleGroup fluidGroup;
+	fluidGroup.particleWorld = &fluid;
+	fluid.ParticleGroups.push_back(fluidGroup);
+
+    GameObjects::ParticleGroup sandGroup;
+
+    sandGroup.Config.FORCE_MULTIPLIER = 50000.f;
+    sandGroup.Config.FORCE_SURFACE = 75.f;
+    sandGroup.Config.VISCOSITY = 60.f;
+    sandGroup.Config.VISCOSITY_LEAVE = 1.f;
+    sandGroup.Config.SHEAR_VISCOSITY = 200.f;
+    sandGroup.Config.NAME = "Sand";
+
+    sandGroup.particleWorld = &fluid;
+    fluid.ParticleGroups.push_back(sandGroup);
+
+    GameObjects::ParticleGroup gasGroup;
+
+    gasGroup.Config.FORCE_MULTIPLIER = 10000.f;
+    gasGroup.Config.FORCE_SURFACE = 10.f;
+    gasGroup.Config.VISCOSITY = 20.f;
+    gasGroup.Config.MIN_DENSITY = 1.f;
+    gasGroup.Config.MAX_DENSITY = 2.f;
+    gasGroup.Config.MAX_FORCE = 43750.f;
+    gasGroup.Config.NAME = "Gas";
+
+    gasGroup.particleWorld = &fluid;
+    fluid.ParticleGroups.push_back(gasGroup);
+
+    SUCCESS("Successfully initialized the particle system!");
+	return;
+}
+
 void Game::InitScene() {
 
     world.timeStep = 0.1f;
@@ -253,7 +289,7 @@ void Game::LoadResources() {
         box.icon = Snake;
         box.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
 
-            this->createSquare(pos.x, pos.y, 2.0f, friction, restitution, 15.0f * size);
+            this->createSquare(pos.x, pos.y, 2, friction, restitution, 15.0f * size);
             
             return true;
             };
@@ -272,6 +308,20 @@ void Game::LoadResources() {
             return true;
             };
         spawnBrowser.addObject(bigBox);
+    }
+    {
+        GameObjects::SpawnableObject box;
+        box.name = "Soft Box";
+        box.type = "Particle";
+        box.describe = "A soft box.";
+        box.icon = Snake;
+        box.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+
+            this->createSoftBody(pos.x, pos.y, friction, restitution, 60.0f * size);
+
+            return true;
+            };
+        spawnBrowser.addObject(box);
     }
     {
         GameObjects::SpawnableObject testobj2;
@@ -301,6 +351,19 @@ void Game::LoadResources() {
         spawnBrowser.addObject(cup);
     }
     {
+        GameObjects::SpawnableObject hollowBox;
+        hollowBox.name = "Hollow Box";
+        hollowBox.type = "Solid";
+        hollowBox.describe = "An ordinary hollow box.";
+        hollowBox.icon = Snake;
+        hollowBox.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+
+            this->createBox(pos.x, pos.y, friction, restitution, 200.f * size);
+            return true;
+            };
+        spawnBrowser.addObject(hollowBox);
+    }
+    {
         GameObjects::SpawnableObject cross;
         cross.name = "Cross";
         cross.type = "Solid";
@@ -312,6 +375,45 @@ void Game::LoadResources() {
             return true;
             };
         spawnBrowser.addObject(cross);
+    }
+    {
+        GameObjects::SpawnableObject gas;
+        gas.name = "Gas";
+        gas.type = "Particle";
+        gas.describe = "Particle based gas.";
+        gas.icon = Snake;
+        gas.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+            fluid.ParticleGroups[2].CreateParticle(world, 4, pos.x, pos.y, 0.5f, 0.05f, 0.025f, sf::Color::White, -0.25f);
+            particleCount++;
+            return true;
+            };
+        spawnBrowser.addObject(gas);
+    }
+    {
+        GameObjects::SpawnableObject sand;
+        sand.name = "Sand";
+        sand.type = "Particle";
+        sand.describe = "Particle based sand.";
+        sand.icon = Snake;
+        sand.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+            fluid.ParticleGroups[1].CreateParticle(world, 4, pos.x, pos.y, 5.5f, 0.75f, 0.025f, sf::Color::Yellow);
+            particleCount++;
+            return true;
+            };
+        spawnBrowser.addObject(sand);
+    }
+    {
+        GameObjects::SpawnableObject water;
+        water.name = "Water";
+        water.type = "Particle";
+        water.describe = "Particle based water.";
+        water.icon = BackGroundT;
+        water.onSpawned = [this](b2Vec2 pos, float size, float friction, float restitution) -> bool {
+            fluid.ParticleGroups[0].CreateParticle(world, 4, pos.x, pos.y, 2.5f, 0.f, selectedObjectRestitution, sf::Color::Cyan);
+            particleCount++;
+            return true;
+            };
+        spawnBrowser.addObject(water);
     }
 
     SUCCESS("Successfully loaded resouces!");
@@ -330,12 +432,14 @@ void Game::Update() {
         if (event->is<sf::Event::Closed>()) {
             window.close();
         }
-        if (window.hasFocus())
-            HandleEvent(*event);
+        if (!ImGui::IsAnyItemHovered())
+            if (window.hasFocus())
+                HandleEvent(*event);
     }
     ImGuiRelated();
-    if(window.hasFocus())
-        KeyLogic();
+    if (!ImGui::IsAnyItemHovered())
+        if (window.hasFocus())
+            KeyLogic();
     UpdateWorld();
 
     return;
@@ -368,7 +472,8 @@ void Game::Render() {
         });
     window.draw(BackGround);
     window.setView(worldView);
-    DrawWorld();
+    if (renderParticle != 0)
+        DrawWorld();
     if (selection.isSelecting) {
         sf::RectangleShape selectionBox;
         sf::Vector2f size = MathUtils::getSFpos(selection.currentPos.x, selection.currentPos.y) - MathUtils::getSFpos(selection.startPos.x, selection.startPos.y);
@@ -503,13 +608,13 @@ void Game::ImGuiRelated() {
 	    ImGui::Text("Particle count: %d", particleCount);
         ImGui::Text("Ctrl + Click to edit it");
 
-        ImGui::SliderFloat("surface##Slider", &fluid.Config.FORCE_SURFACE, 0.f, 5000.f, nullptr, ImGuiSliderFlags_None);
+        ImGui::SliderFloat("surface##Slider", &fluid.ParticleGroups[0].Config.FORCE_SURFACE, 0.f, 5000.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
-		    if (ImGui::ArrowButton("##surface left", ImGuiDir_Left)) fluid.Config.FORCE_SURFACE -= 10.f;
+		    if (ImGui::ArrowButton("##surface left", ImGuiDir_Left)) fluid.ParticleGroups[0].Config.FORCE_SURFACE -= 10.f;
             ImGui::SameLine();
-		    if (ImGui::ArrowButton("##surface right", ImGuiDir_Right)) fluid.Config.FORCE_SURFACE += 10.f;
+		    if (ImGui::ArrowButton("##surface right", ImGuiDir_Right)) fluid.ParticleGroups[0].Config.FORCE_SURFACE += 10.f;
             ImGui::SameLine();
-			if (ImGui::Button("reset##surface")) fluid.Config.FORCE_SURFACE = 75.f;
+			if (ImGui::Button("reset##surface")) fluid.ParticleGroups[0].Config.FORCE_SURFACE = 50.f;
             /*
         ImGui::SliderFloat("viscosity##Slider", &fluid.Config.SHEAR_VISCOSITY, 0.f, 110.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
@@ -523,37 +628,40 @@ void Game::ImGuiRelated() {
         fluid.Config.VISCOSITY_LEAVE = fluid.Config.SHEAR_VISCOSITY * 0.02f;
         */
 
-         ImGui::SliderFloat("shear viscosity##Slider", &fluid.Config.SHEAR_VISCOSITY, 0.f, 150.f, nullptr, ImGuiSliderFlags_None);
+         ImGui::SliderFloat("shear viscosity##Slider", &fluid.ParticleGroups[0].Config.SHEAR_VISCOSITY, 0.f, 200.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##shear viscosity left", ImGuiDir_Left)) fluid.Config.SHEAR_VISCOSITY -= 1.f;
+            if (ImGui::ArrowButton("##shear viscosity left", ImGuiDir_Left)) fluid.ParticleGroups[0].Config.SHEAR_VISCOSITY -= 1.f;
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##shear viscosity right", ImGuiDir_Right)) fluid.Config.SHEAR_VISCOSITY += 1.f;
+            if (ImGui::ArrowButton("##shear viscosity right", ImGuiDir_Right)) fluid.ParticleGroups[0].Config.SHEAR_VISCOSITY += 1.f;
             ImGui::SameLine();
-            if (ImGui::Button("reset##shear viscosity")) fluid.Config.SHEAR_VISCOSITY = 20.f;
+            if (ImGui::Button("reset##shear viscosity")) fluid.ParticleGroups[0].Config.SHEAR_VISCOSITY = 20.f;
 
-         ImGui::SliderFloat("viscosity##Slider", &fluid.Config.VISCOSITY, 0.f, 60.f, nullptr, ImGuiSliderFlags_None);
+         ImGui::SliderFloat("viscosity##Slider", &fluid.ParticleGroups[0].Config.VISCOSITY, 0.f, 60.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##viscosity left", ImGuiDir_Left)) fluid.Config.VISCOSITY -= 1.f;
+            if (ImGui::ArrowButton("##viscosity left", ImGuiDir_Left)) fluid.ParticleGroups[0].Config.VISCOSITY -= 1.f;
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##viscosity right", ImGuiDir_Right)) fluid.Config.VISCOSITY += 1.f;
+            if (ImGui::ArrowButton("##viscosity right", ImGuiDir_Right)) fluid.ParticleGroups[0].Config.VISCOSITY += 1.f;
             ImGui::SameLine();
-            if (ImGui::Button("reset##viscosity")) fluid.Config.VISCOSITY = 8.f;
+            if (ImGui::Button("reset##viscosity")) fluid.ParticleGroups[0].Config.VISCOSITY = 0.f;
 
-         ImGui::SliderFloat("viscosity leave##Slider", &fluid.Config.VISCOSITY_LEAVE, 0.f, 2.5f, nullptr, ImGuiSliderFlags_None);
+         ImGui::SliderFloat("viscosity leave##Slider", &fluid.ParticleGroups[0].Config.VISCOSITY_LEAVE, 0.f, 1.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##viscosity leave left", ImGuiDir_Left)) fluid.Config.VISCOSITY_LEAVE -= 0.1f;
+            if (ImGui::ArrowButton("##viscosity leave left", ImGuiDir_Left)) fluid.ParticleGroups[0].Config.VISCOSITY_LEAVE -= 0.1f;
             ImGui::SameLine();
-            if (ImGui::ArrowButton("##viscosity leave right", ImGuiDir_Right)) fluid.Config.VISCOSITY_LEAVE += 0.1f;
+            if (ImGui::ArrowButton("##viscosity leave right", ImGuiDir_Right)) fluid.ParticleGroups[0].Config.VISCOSITY_LEAVE += 0.1f;
             ImGui::SameLine();
-            if (ImGui::Button("reset##viscosity leave")) fluid.Config.VISCOSITY_LEAVE = 0.8f;
+            if (ImGui::Button("reset##viscosity leave")) fluid.ParticleGroups[0].Config.VISCOSITY_LEAVE = 0.f;
 
     }ImGui::End();
 
     if (ImGui::Begin("dummy window"))
     {
-        // open file dialog when user clicks this button
+        static bool sss;
+        ImGui::ToggleButton("asdf", &sss);
         if (ImGui::Button("open file dialog"))
             fileDialog.Open();
+        if (ImGui::Button("reset imgui"))
+            ImGui::LoadIniSettingsFromDisk("default.ini");
 
     }ImGui::End();
     
@@ -566,7 +674,6 @@ void Game::ImGuiRelated() {
     }
     return;
 }
-
 void Game::HandleEvent(const sf::Event& event) {
     if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>()) {
         if (mousePressed->button == sf::Mouse::Button::Left) {
@@ -647,9 +754,13 @@ void Game::HandleEvent(const sf::Event& event) {
                     float y = minY + j * stepY + stepY / 2;
                     //createSquare(x, y, 0.5, 0.3, 0.1, 5);
                     //fluid.CreateParticle(world, -0.1, 4, x, y, 1.0f, 0.f, 0.1f); // smoke
-                    fluid.CreateParticle(world, 4, x, y, 2.5f, selectedObjectFriction, selectedObjectRestitution, sf::Color::Cyan); // water
+                    //fluid.ParticleGroups[0].CreateParticle(world, 4, x, y, 2.5f, selectedObjectFriction, selectedObjectRestitution, sf::Color::Cyan); // water
                     //fluid.CreateParticle(world, 1, 4, x, y, 2.5f, 2.f, 0.1f, sf::Color::Cyan); // sand
-                    particleCount++;
+                    if (selectedObject[10] != nullptr) {
+                        if (!selectedObject[10]->spawn({ x, y }, selectedObjectSize, selectedObjectFriction, selectedObjectRestitution)) {
+                            ERROR("Failed to spawn object!");
+                        }
+                    }
                 }
             }
             selection.isSelecting = false;
@@ -687,21 +798,32 @@ void Game::HandleEvent(const sf::Event& event) {
             fluid.unfreeze();
         }
         */
-        if (keyPressed->scancode == sf::Keyboard::Scan::P)
-        {
+        if (keyPressed->scancode == sf::Keyboard::Scan::P) {
             renderParticle = (renderParticle + 1) % 5;
         }
 
+        if (keyPressed->scancode == sf::Keyboard::Scan::LShift) {
+            if (selection.isSelecting) {
+                selection.isSelecting = false;
+            }
+            else {
+                selection.isSelecting = true;
+                selection.startPos = MathUtils::toB2Position(window.mapPixelToCoords(sf::Mouse::getPosition(window)).x, window.mapPixelToCoords(sf::Mouse::getPosition(window)).y, worldView);
+                selection.currentPos = selection.startPos;
+            }
+        }
         if (keyPressed->scancode == sf::Keyboard::Scan::R) {
             for (auto& [bodyId, shape] : squares)
                 b2DestroyBody(bodyId);
             for (auto& [bodyId, shape] : circles)
                 b2DestroyBody(bodyId);
-            for (auto& p : fluid.Particles)
-                fluid.DestroyParticle(world, &p);
+            for (auto& g : fluid.ParticleGroups)
+                for (auto& p : g.Particles)
+                    g.DestroyParticle(world, &p);
             squares.clear();
             circles.clear();
-            fluid.Particles.clear();
+            for (auto& g : fluid.ParticleGroups)
+                g.Particles.clear();
             particleCount = 0;
             INFO("All deleted");
         }
@@ -814,31 +936,35 @@ void Game::DrawWorld() {
         renderB2::renderb2Polygon(&window, rendersettings, b2Shape_GetPolygon(mapbodyShape), mapbodyId, screensettings);
     }
     //renderB2::renderSoul(&window, playerCircle, playerId, screensettings);
-
+    /*
     for (auto& [bodyId, shape] : squares) {
         renderB2::renderb2Polygon(&window, rendersettings, shape, bodyId, screensettings);
-    }
+    }*/
+	renderB2::renderb2Polygons(&window, rendersettings, squares, screensettings);
+
     rendersettings.verticecount = 6;
     for (auto& [bodyId, shape] : circles) {
         renderB2::renderb2circle(&window, rendersettings, shape, bodyId, screensettings);
     }
 
     rendersettings.verticecount = 3;
+    renderB2::rendersandparticle(&window, rendersettings, fluid.ParticleGroups[1], screensettings);
+    renderB2::rendergasparticle(&window, rendersettings, fluid.ParticleGroups[2], screensettings);
     switch (renderParticle) {
     case 0:
         //renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
         break;
     case 1:
-        renderB2::renderwatershader(&window, rendersettings, fluid, screensettings);
+        renderB2::renderwatershader(&window, rendersettings, fluid.ParticleGroups[0], screensettings);
         break;
     case 2:
-        renderB2::rendersimpleparticle(&window, rendersettings, fluid, screensettings);
+        renderB2::rendersimpleparticle(&window, rendersettings, fluid.ParticleGroups[0], screensettings);
         break;
     case 3:
-        renderB2::renderparticletest(&window, rendersettings, fluid, screensettings);
+        renderB2::renderparticletest(&window, rendersettings, fluid.ParticleGroups[0], screensettings);
         break;
     case 4:
-        renderB2::rendersandparticle(&window, rendersettings, fluid, screensettings);
+        renderB2::rendersandparticle(&window, rendersettings, fluid.ParticleGroups[0], screensettings);
         break;
     default:
 		ERROR("RenderParticle mode error!");
@@ -892,11 +1018,6 @@ void Game::DrawWorld() {
 void Game::KeyLogic() {
 
 
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift)) {
-        selection.isSelecting = true;
-        selection.startPos = MathUtils::toB2Position(window.mapPixelToCoords(sf::Mouse::getPosition(window)).x, window.mapPixelToCoords(sf::Mouse::getPosition(window)).y, worldView);
-        selection.currentPos = selection.startPos;
-    }
 
     Dragdef = b2DefaultExplosionDef();
 
@@ -1068,6 +1189,9 @@ void Game::ImguiSpawnBrowser() {
                 else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_0)) {
                     selectedObject[9] = &obj;
                 }
+                else if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_LeftShift)) {
+                    selectedObject[10] = &obj;
+                }
             }
             /*
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
@@ -1089,7 +1213,7 @@ void Game::ImguiSpawnBrowser() {
 
 void Game::ImguiSpawnObjSettings() {
     if (ImGui::Begin("Spawnable Objects Settings")) {
-         ImGui::SliderFloat("Size##Slider", &selectedObjectSize, 0.f, 10.f, nullptr, ImGuiSliderFlags_None);
+         ImGui::SliderFloat("Size##Slider", &selectedObjectSize, 0.1f, 10.f, nullptr, ImGuiSliderFlags_None);
             ImGui::SameLine();
             if (ImGui::ArrowButton("##Size left", ImGuiDir_Left)) selectedObjectSize -= 1.f;
             ImGui::SameLine();
@@ -1523,4 +1647,150 @@ void Game::createCross(float x, float y, float friction, float restitution, floa
     weldDef.localAnchorB = b2Vec2{ 0.0f, 0.0f };
     weldDef.referenceAngle = 0.0f;
     b2CreateWeldJoint(world.worldId, &weldDef);
+}
+
+void Game::createBox(float x, float y, float friction, float restitution, float size) {
+    float wallThickness = size * 0.15f;
+    float halfSize = size / 2.0f;
+    float halfWallThickness = wallThickness / 2.0f;
+
+    b2ShapeDef shapeDef = b2DefaultShapeDef();
+    shapeDef.density = 1.0f;
+    shapeDef.friction = friction;
+    shapeDef.restitution = restitution;
+
+    b2BodyDef bottomDef = b2DefaultBodyDef();
+    bottomDef.type = b2_dynamicBody;
+    bottomDef.position = b2Vec2{ x, y - halfSize + halfWallThickness };
+    b2BodyId bottomId = b2CreateBody(world.worldId, &bottomDef);
+    b2Polygon bottomBox = b2MakeBox(halfSize + halfWallThickness, halfWallThickness);
+    b2CreatePolygonShape(bottomId, &shapeDef, &bottomBox);
+    squares.push_back({ bottomId, bottomBox });
+
+    b2BodyDef topDef = b2DefaultBodyDef();
+    topDef.type = b2_dynamicBody;
+    topDef.position = b2Vec2{ x, y + halfSize - halfWallThickness };
+    b2BodyId topId = b2CreateBody(world.worldId, &topDef);
+    b2Polygon topBox = b2MakeBox(halfSize + halfWallThickness, halfWallThickness);
+    b2CreatePolygonShape(topId, &shapeDef, &topBox);
+    squares.push_back({ topId, topBox });
+
+    b2BodyDef leftDef = b2DefaultBodyDef();
+    leftDef.type = b2_dynamicBody;
+    leftDef.position = b2Vec2{ x - halfSize + halfWallThickness, y };
+    b2BodyId leftId = b2CreateBody(world.worldId, &leftDef);
+    b2Polygon leftBox = b2MakeBox(halfWallThickness, halfSize + halfWallThickness);
+    b2CreatePolygonShape(leftId, &shapeDef, &leftBox);
+    squares.push_back({ leftId, leftBox });
+
+    b2BodyDef rightDef = b2DefaultBodyDef();
+    rightDef.type = b2_dynamicBody;
+    rightDef.position = b2Vec2{ x + halfSize - halfWallThickness, y };
+    b2BodyId rightId = b2CreateBody(world.worldId, &rightDef);
+    b2Polygon rightBox = b2MakeBox(halfWallThickness, halfSize + halfWallThickness);
+    b2CreatePolygonShape(rightId, &shapeDef, &rightBox);
+    squares.push_back({ rightId, rightBox });
+
+    b2WeldJointDef weldBottomLeft = b2DefaultWeldJointDef();
+    weldBottomLeft.bodyIdA = bottomId;
+    weldBottomLeft.bodyIdB = leftId;
+    weldBottomLeft.localAnchorA = b2Vec2{ -halfSize, halfWallThickness };
+    weldBottomLeft.localAnchorB = b2Vec2{ halfWallThickness, -halfSize };
+    weldBottomLeft.referenceAngle = 0.0f;
+    b2CreateWeldJoint(world.worldId, &weldBottomLeft);
+
+    b2WeldJointDef weldBottomRight = b2DefaultWeldJointDef();
+    weldBottomRight.bodyIdA = bottomId;
+    weldBottomRight.bodyIdB = rightId;
+    weldBottomRight.localAnchorA = b2Vec2{ halfSize, halfWallThickness };
+    weldBottomRight.localAnchorB = b2Vec2{ -halfWallThickness, -halfSize };
+    weldBottomRight.referenceAngle = 0.0f;
+    b2CreateWeldJoint(world.worldId, &weldBottomRight);
+
+    b2WeldJointDef weldTopLeft = b2DefaultWeldJointDef();
+    weldTopLeft.bodyIdA = topId;
+    weldTopLeft.bodyIdB = leftId;
+    weldTopLeft.localAnchorA = b2Vec2{ -halfSize, -halfWallThickness };
+    weldTopLeft.localAnchorB = b2Vec2{ halfWallThickness, halfSize };
+    weldTopLeft.referenceAngle = 0.0f;
+    b2CreateWeldJoint(world.worldId, &weldTopLeft);
+
+    b2WeldJointDef weldTopRight = b2DefaultWeldJointDef();
+    weldTopRight.bodyIdA = topId;
+    weldTopRight.bodyIdB = rightId;
+    weldTopRight.localAnchorA = b2Vec2{ halfSize, -halfWallThickness };
+    weldTopRight.localAnchorB = b2Vec2{ -halfWallThickness, halfSize };
+    weldTopRight.referenceAngle = 0.0f;
+    b2CreateWeldJoint(world.worldId, &weldTopRight);
+}
+
+void Game::createSoftBody(float x, float y, float friction, float restitution, float size) {
+
+    restitution *= 0.5f;
+    const int particlesPerSide = 6;
+    float particleRadius = size / (particlesPerSide - 1) * 0.8f;
+    float spacing = particleRadius * 0.85f;
+
+    b2ShapeDef shapeDef = b2DefaultShapeDef();
+    shapeDef.density = 0.5f;
+    shapeDef.friction = friction;
+    shapeDef.restitution = restitution;
+
+
+    std::vector<std::vector<b2BodyId>> grid(particlesPerSide, std::vector<b2BodyId>(particlesPerSide));
+
+    for (int i = 0; i < particlesPerSide; i++) {
+        for (int j = 0; j < particlesPerSide; j++) {
+            float px = x - size / 2.0f + i * spacing;
+            float py = y - size / 2.0f + j * spacing;
+
+            b2BodyDef bodyDef = b2DefaultBodyDef();
+            bodyDef.type = b2_dynamicBody;
+            bodyDef.position = { px, py };
+            b2BodyId bodyId = b2CreateBody(world.worldId, &bodyDef);
+
+            b2Circle circle;
+            circle.radius = particleRadius;
+            circle.center = b2Vec2{ 0.0f, 0.0f };
+
+            b2CreateCircleShape(bodyId, &shapeDef, &circle);
+
+            circles.push_back({ bodyId, circle });
+
+            grid[i][j] = bodyId;
+        }
+    }
+
+    spacing = particleRadius * 0.15f;
+    particleRadius -= spacing;
+
+    b2WeldJointDef jointDef = b2DefaultWeldJointDef();
+    jointDef.linearHertz = 1.5f;
+    jointDef.linearDampingRatio = 0.05f;
+    jointDef.angularHertz = 1.5f;
+    jointDef.angularDampingRatio = 0.05f;
+    jointDef.referenceAngle = 0.0f;
+    jointDef.collideConnected = false;
+
+    for (int i = 0; i < particlesPerSide; i++) {
+        for (int j = 0; j < particlesPerSide; j++) {
+            b2BodyId current = grid[i][j];
+
+            if (i < particlesPerSide - 1) {
+                jointDef.bodyIdA = current;
+                jointDef.bodyIdB = grid[i + 1][j];
+                jointDef.localAnchorA = b2Vec2{ particleRadius, 0.0f };
+                jointDef.localAnchorB = b2Vec2{ -particleRadius, 0.0f };
+                b2CreateWeldJoint(world.worldId, &jointDef);
+            }
+
+            if (j < particlesPerSide - 1) {
+                jointDef.bodyIdA = current;
+                jointDef.bodyIdB = grid[i][j + 1];
+                jointDef.localAnchorA = b2Vec2{ 0.0f, particleRadius };
+                jointDef.localAnchorB = b2Vec2{ 0.0f, -particleRadius };
+                b2CreateWeldJoint(world.worldId, &jointDef);
+            }
+        }
+    }
 }
